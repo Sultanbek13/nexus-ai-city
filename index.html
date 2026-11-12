@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nexus AI City</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed 3D canvas, glass HUD pinned to the edges, info panel docks right (bottom sheet on phones) */
+:root{
+  --ground:#0a0f1a;
+  --glass:rgba(11,17,29,.80);
+  --glass-strong:rgba(9,14,24,.94);
+  --line:rgba(150,185,230,.18);
+  --text:#e9eff8;
+  --muted:#93a4bc;
+  --gold:#ffb547;   /* business */
+  --cyan:#3ad7ff;   /* AI / data */
+  --good:#5be3a1;
+  --bad:#ff6b7a;
+  --f-display:"Unbounded","Space Grotesk",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;overflow:hidden;margin:0}
+body{background:var(--ground);color:var(--text);font-family:var(--f-body);font-size:14px}
+#scene{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:14px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* top bar */
+#top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+  padding-top:calc(14px + env(safe-area-inset-top,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none;z-index:5}
+#top > *{pointer-events:auto}
+#brand{padding:12px 16px;max-width:360px}
+#brand .eyebrow{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:600}
+#brand h1{font-family:var(--f-display);font-weight:700;font-size:22px;margin:4px 0 2px;letter-spacing:.02em;line-height:1.1}
+#brand h1 span{color:var(--cyan)}
+#brand p{margin:0;color:var(--muted);font-size:12px}
+#tools{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;padding:6px}
+.tbtn{background:transparent;border:1px solid transparent;border-radius:9px;padding:7px 11px;font-size:12.5px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tbtn:hover{background:rgba(255,255,255,.07)}
+.tbtn[aria-pressed="true"]{background:rgba(58,215,255,.14);border-color:rgba(58,215,255,.45);color:#bff1ff}
+.tbtn .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.tbtn[aria-pressed="true"] .dot{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+
+/* KPI strip */
+#kpis{position:fixed;left:0;bottom:0;right:0;z-index:4;pointer-events:none;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#kpi-row{pointer-events:auto;display:flex;gap:0;overflow-x:auto;max-width:max-content;scrollbar-width:none}
+#kpi-row::-webkit-scrollbar{display:none}
+.kpi{padding:10px 16px;border-right:1px solid var(--line);min-width:118px}
+.kpi:last-child{border-right:0}
+.kpi .l{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-family:var(--f-mono);font-size:18px;font-weight:500;margin-top:3px;white-space:nowrap}
+.kpi .v small{font-size:11px;color:var(--muted);margin-left:2px}
+.kpi .s{font-size:11px;margin-top:2px;color:var(--muted)}
+.up{color:var(--good)!important}.down{color:var(--bad)!important}
+
+/* Ask NEXUS */
+#ask{position:fixed;z-index:6;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(90px + env(safe-area-inset-bottom,0px));width:320px;max-width:calc(100vw - 32px)}
+#ask-toggle{display:flex;align-items:center;gap:8px;margin-left:auto;padding:10px 14px;border-radius:999px;background:var(--glass);border:1px solid rgba(58,215,255,.45);font-weight:600;font-size:13px;backdrop-filter:blur(12px)}
+#ask-toggle .pulse{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 0 0 rgba(58,215,255,.6);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 9px rgba(58,215,255,0)}100%{box-shadow:0 0 0 0 rgba(58,215,255,0)}}
+#ask-box{margin-top:8px;padding:14px}
+#ask-box h3{margin:0 0 8px;font-family:var(--f-display);font-size:13px;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip-btn{border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:999px;padding:6px 10px;font-size:12px}
+.chip-btn:hover{border-color:var(--cyan);color:#bff1ff}
+#ask-answer{margin-top:10px;font-size:13px;line-height:1.5;color:#d6e2f2;min-height:20px}
+#ask-answer b{color:var(--cyan);font-weight:600}
+
+/* info panel */
+#panel{position:fixed;z-index:7;top:calc(96px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:370px;max-height:calc(100% - 210px);overflow-y:auto;padding:18px;background:var(--glass-strong)}
+#panel .head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.cat{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;padding:4px 9px;border-radius:999px;border:1px solid currentColor}
+#p-close{background:none;border:0;font-size:22px;line-height:1;color:var(--muted);padding:2px 6px}
+#p-close:hover{color:var(--text)}
+#p-name{font-family:var(--f-display);font-weight:500;font-size:20px;margin:12px 0 6px;text-wrap:balance;line-height:1.2}
+#p-desc{margin:0 0 14px;color:#c9d5e6;line-height:1.55;font-size:13.5px}
+#p-kpis{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:10px;overflow:hidden;margin-bottom:14px}
+#p-kpis div{background:#0d1525;padding:10px 12px}
+#p-kpis .l{font-size:10.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+#p-kpis .v{font-family:var(--f-mono);font-size:17px;margin-top:3px}
+.spark{margin-bottom:14px}
+.spark-head{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:6px}
+.spark-head .mono{color:var(--text)}
+#p-spark{width:100%;height:74px;display:block}
+#p-ins{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.ins{display:flex;gap:10px;font-size:12.5px;line-height:1.5;color:#d3deee;padding:10px 12px;border-radius:10px;background:rgba(58,215,255,.07);border:1px solid rgba(58,215,255,.18)}
+.ins .tag{flex:none;font-family:var(--f-mono);font-size:10px;color:var(--cyan);border:1px solid rgba(58,215,255,.5);border-radius:5px;padding:1px 5px;height:fit-content;margin-top:2px}
+.actions{display:flex;gap:8px}
+.primary{flex:1;border:0;border-radius:10px;padding:12px 14px;font-weight:600;font-size:14px;color:#1b1203;background:var(--gold)}
+.primary:hover{filter:brightness(1.08)}
+.ghost{border:1px solid var(--line);background:transparent;border-radius:10px;padding:12px 14px;font-size:13px}
+.ghost:hover{border-color:var(--muted)}
+
+/* directory */
+#dir{position:fixed;z-index:6;top:calc(150px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));width:250px;max-height:calc(100% - 270px);overflow-y:auto;padding:8px}
+#dir h3{margin:6px 8px 8px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.dir-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;padding:8px;border-radius:8px;font-size:13px}
+.dir-item:hover,.dir-item.on{background:rgba(255,255,255,.07)}
+.dir-item i{width:10px;height:10px;border-radius:3px;flex:none}
+.dir-item span{flex:1;min-width:0}
+.dir-item em{font-style:normal;font-size:11px;color:var(--muted)}
+
+/* labels */
+#labels{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+.lbl{position:absolute;left:0;top:0;transform:translate(-50%,-100%);font-size:11px;font-weight:600;white-space:nowrap;padding:4px 8px 4px 7px;border-radius:999px;background:rgba(8,13,22,.78);border:1px solid var(--line);display:flex;align-items:center;gap:6px;pointer-events:auto;cursor:pointer;will-change:transform}
+.lbl i{width:7px;height:7px;border-radius:50%}
+.lbl:hover{border-color:var(--text)}
+
+#tip{position:fixed;z-index:9;pointer-events:none;padding:6px 10px;border-radius:8px;background:rgba(8,13,22,.92);border:1px solid var(--line);font-size:12px;font-weight:500;transform:translate(14px,14px)}
+#tip em{display:block;font-style:normal;color:var(--muted);font-size:11px;font-weight:400}
+
+/* interior bar */
+#inbar{position:fixed;z-index:6;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;max-width:calc(100vw - 32px)}
+#inbar .t{min-width:0}
+#inbar .t small{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+#inbar .t b{font-family:var(--f-display);font-weight:500;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+#in-exit{border:0;border-radius:9px;padding:10px 14px;background:var(--gold);color:#1b1203;font-weight:600;white-space:nowrap}
+#in-items{position:fixed;z-index:5;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;gap:6px;padding:6px;max-width:calc(100vw - 32px);overflow-x:auto}
+#in-items button{white-space:nowrap}
+
+/* intro */
+#intro{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:radial-gradient(ellipse at center,rgba(10,15,26,.55),rgba(10,15,26,.85));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#intro .card{max-width:470px;padding:26px 26px 22px;background:var(--glass-strong)}
+#intro .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:600}
+#intro h2{font-family:var(--f-display);font-size:30px;font-weight:700;margin:8px 0 10px;line-height:1.1;text-wrap:balance}
+#intro h2 span{color:var(--cyan)}
+#intro p{color:#c9d5e6;line-height:1.55;margin:0 0 16px}
+#intro ul{list-style:none;padding:0;margin:0 0 20px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#intro li{font-size:12.5px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;color:#d3deee}
+#intro li b{display:block;font-family:var(--f-mono);font-size:11px;color:var(--cyan);font-weight:500;margin-bottom:2px}
+#loading{font-size:12px;color:var(--muted);margin-top:10px;text-align:center}
+
+#fade{position:fixed;inset:0;background:#05080f;z-index:15;opacity:0;pointer-events:none;transition:opacity .35s}
+#fade.on{opacity:1}
+#err{position:fixed;inset:0;display:grid;place-items:center;z-index:30;padding:24px;text-align:center;color:var(--muted)}
+
+@media (max-width:760px){
+  #brand{padding:9px 12px;max-width:52vw}
+  #brand h1{font-size:16px}
+  #brand p{display:none}
+  #tools{max-width:46vw}
+  .tbtn{padding:6px 8px;font-size:11.5px}
+  #dir{display:none}
+  #panel{top:auto;left:0;right:0;bottom:0;width:auto;max-height:58%;border-radius:16px 16px 0 0;
+    padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  #ask{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  .kpi{min-width:104px;padding:8px 12px}
+  .kpi .v{font-size:15px}
+  #intro ul{grid-template-columns:1fr}
+  #intro h2{font-size:24px}
+  #inbar{top:calc(70px + env(safe-area-inset-top,0px))}
+}
+@media (prefers-reduced-motion:reduce){#ask-toggle .pulse{animation:none}#fade{transition:none}}
+</style>
+</head>
+<body>
+
+<canvas id="scene" tabindex="0" aria-label="3D view of Nexus AI City"></canvas>
+<div id="labels"></div>
+<div id="tip" hidden></div>
+<div id="fade"></div>
+
+<header id="top">
+  <div id="brand" class="glass">
+    <div class="eyebrow">Faculty of Business &amp; Technology</div>
+    <h1>NEXUS <span>AI</span> City</h1>
+    <p>An AI-powered smart city where data runs business, traffic, energy and services.</p>
+  </div>
+  <div id="tools" class="glass" role="toolbar" aria-label="City controls">
+    <button class="tbtn" id="b-night" aria-pressed="false"><span class="dot"></span>Night</button>
+    <button class="tbtn" id="b-ai" aria-pressed="true"><span class="dot"></span>AI traffic</button>
+    <button class="tbtn" id="b-tour" aria-pressed="false"><span class="dot"></span>Tour</button>
+    <button class="tbtn" id="b-labels" aria-pressed="true"><span class="dot"></span>Labels</button>
+    <button class="tbtn" id="b-reset">Reset view</button>
+  </div>
+</header>
+
+<nav id="dir" class="glass" aria-label="City directory">
+  <h3>City directory</h3>
+  <div id="dir-list"></div>
+</nav>
+
+<aside id="panel" class="glass" hidden aria-live="polite">
+  <div class="head"><span class="cat" id="p-cat"></span><button id="p-close" aria-label="Close panel">×</button></div>
+  <h2 id="p-name"></h2>
+  <p id="p-desc"></p>
+  <div id="p-kpis"></div>
+  <div class="spark" id="p-spark-wrap">
+    <div class="spark-head"><span id="p-spark-label"></span><span class="mono" id="p-spark-val"></span></div>
+    <canvas id="p-spark"></canvas>
+  </div>
+  <div id="p-ins"></div>
+  <div class="actions">
+    <button class="primary" id="p-enter">Enter building</button>
+    <button class="ghost" id="p-fly">Focus</button>
+  </div>
+</aside>
+
+<div id="inbar" class="glass" hidden>
+  <div class="t"><small>Inside · click any object</small><b id="in-name"></b></div>
+  <button id="in-exit">Exit to city</button>
+</div>
+<div id="in-items" class="glass" hidden></div>
+
+<section id="kpis" aria-label="Live city metrics">
+  <div id="kpi-row" class="glass">
+    <div class="kpi"><div class="l">City revenue today</div><div class="v" id="k-rev">$0</div><div class="s up" id="k-rev-s">+6.2% vs yesterday</div></div>
+    <div class="kpi"><div class="l">Power demand</div><div class="v" id="k-pow">0<small>MW</small></div><div class="s" id="k-pow-s">81% renewable</div></div>
+    <div class="kpi"><div class="l">Traffic flow</div><div class="v" id="k-spd">0<small>km/h</small></div><div class="s" id="k-spd-s">avg speed</div></div>
+    <div class="kpi"><div class="l">Cars waiting</div><div class="v" id="k-wait">0</div><div class="s" id="k-wait-s">at red lights</div></div>
+    <div class="kpi"><div class="l">AI decisions</div><div class="v" id="k-ai">0<small>/min</small></div><div class="s">across 13 districts</div></div>
+    <div class="kpi"><div class="l">CO₂ avoided</div><div class="v" id="k-co2">0<small>t</small></div><div class="s">today</div></div>
+  </div>
+</section>
+
+<div id="ask">
+  <button id="ask-toggle" aria-expanded="false"><span class="pulse"></span>Ask NEXUS AI</button>
+  <div id="ask-box" class="glass" hidden>
+    <h3>City assistant</h3>
+    <div class="chips">
+      <button class="chip-btn" data-q="traffic">How is traffic?</button>
+      <button class="chip-btn" data-q="money">Top earning district?</button>
+      <button class="chip-btn" data-q="green">How green is the city?</button>
+      <button class="chip-btn" data-q="invest">Where should I invest?</button>
+      <button class="chip-btn" data-q="jobs">Future jobs here?</button>
+    </div>
+    <div id="ask-answer">Pick a question. Answers use the live city data.</div>
+  </div>
+</div>
+
+<div id="intro">
+  <div class="card glass">
+    <div class="eyebrow">AI in Business &amp; Technology · Smart City Project</div>
+    <h2>Welcome to <span>NEXUS</span>, the AI-powered city</h2>
+    <p>13 districts run by data: a FinTech bank, startup hub, robot logistics, smart grid and more. Every building can be opened, and every number updates live.</p>
+    <ul>
+      <li><b>DRAG</b>Rotate 360°</li>
+      <li><b>SCROLL / PINCH</b>Zoom in and out</li>
+      <li><b>RIGHT-DRAG</b>Move the map</li>
+      <li><b>CLICK</b>Open a building, then enter it</li>
+    </ul>
+    <button class="primary" id="intro-go" style="width:100%">Start exploring</button>
+    <div id="loading">Loading 3D engine…</div>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const $ = s => document.querySelector(s);
+const rand = (a,b) => a + Math.random()*(b-a);
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const fmt = (n,d=0) => n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const hex = c => '#'+c.toString(16).padStart(6,'0');
+
+/* ================= DATA ================= */
+const B = [
+ {id:'core',name:'AI Command Center',short:'AI Command',cat:'City Operations · AI',c:0x3ad7ff,at:[-22.5,-22.5],h:78,
+  desc:'The brain of Nexus. Machine-learning models read 48,000 sensors every second and coordinate traffic lights, power distribution and emergency response.',
+  k:[['Sensors online',48210,'',0,.002],['AI decisions / min',3420,'',0,.05],['Model accuracy',97.8,'%',1,.001],['Response time',42,' ms',0,.08]],
+  sp:['AI decisions per hour',3400],
+  ins:['Rerouted 1,240 cars away from Mall Avenue after a congestion forecast.','Tomorrow’s 18:00 peak is forecast 12% above average; offices will pre-cool from 16:30 to cut power cost.'],
+  room:[
+   ['hologram','City Digital Twin',0,0,'A live 3D copy of Nexus. Every car, building and power line is mirrored here so the AI can test a decision before applying it to the real city.',[['Objects tracked','1.2M'],['Refresh rate','10 Hz']]],
+   ['screen','Traffic Prediction Wall',0,-20,'Forecasts congestion 30 minutes ahead from camera and GPS data, then retimes traffic lights automatically.',[['Forecast horizon','30 min'],['Accuracy','94%']]],
+   ['desks','Operator Consoles',-16,7,'Human operators supervise the AI. Any automated decision above a risk threshold needs a person to approve it.',[['Operators on shift','24'],['Human overrides today','17']]],
+   ['racks','Edge AI Servers',17,-11,'On-site GPUs run vision and routing models with low latency, so the city keeps working even if the cloud link drops.',[['GPUs','512'],['Latency','4 ms']]],
+   ['screen','Emergency Response Board',-31,-6,'Shows every ambulance, fire truck and police unit, and suggests the fastest route to each incident.',[['Avg response','6.1 min'],['Units live','86']],{wall:'left'}],
+   ['sofa','Briefing Lounge',16,10,'City managers and partner companies review weekly AI performance reports here.',[['Weekly briefings','3'],['Partner firms','40+']]]]},
+ {id:'bank',name:'Quantum Bank',short:'Quantum Bank',cat:'Finance · FinTech',c:0xffb547,at:[22.5,-22.5],h:64,
+  desc:'A digital-first bank. AI scores loans in 90 seconds, blocks fraud in real time and runs a digital wallet used by 92% of residents.',
+  k:[['Assets managed',4.82,'$B',2,.002],['Loans approved today',1284,'',0,.01],['Fraud blocked',2.14,'$M',2,.004],['Net profit margin',31.4,'%',1,.003]],
+  sp:['Transaction volume, $M/h',38],
+  ins:['Small-business loan demand is up 18% this month, led by e-commerce sellers from Orbit Mall.','Fraud model caught a card-skimming pattern at 3 ATMs and froze 212 cards before any loss.'],
+  room:[
+   ['vault','Digital Asset Vault',0,-20,'Cold storage for tokenized assets and the bank’s digital currency reserves, protected by multi-signature keys.',[['Tokenized assets','$620M'],['Keys required','5 of 7']]],
+   ['counter','AI Teller Desks',-14,8,'Voice-enabled AI tellers open accounts, issue cards and answer questions in 12 languages. Staff handle complex cases.',[['Avg service time','3 min'],['Languages','12']]],
+   ['screen','Live Trading Wall',-31,-6,'Real-time prices for stocks, bonds and currencies traded by the investment desk.',[['Daily volume','$86M'],['Assets tracked','2,400']],{wall:'left'}],
+   ['desks','Risk Analytics Team',14,-8,'Analysts and machine-learning models score loan applications and stress-test the portfolio.',[['Loan decision','90 sec'],['Default rate','1.4%']]],
+   ['hologram','Fraud Detection Model',0,2,'A graph neural network checks every card payment and flags unusual patterns in under 50 milliseconds.',[['Payments scanned','2.3M/day'],['False alarms','0.2%']]],
+   ['sofa','Private Client Lounge',15,11,'Wealth managers meet clients here, with AI-generated portfolio suggestions.',[['Clients','1,850'],['Avg portfolio','$410K']]]]},
+ {id:'startup',name:'Launchpad Startup Hub',short:'Launchpad',cat:'Entrepreneurship',c:0xff7a45,at:[-22.5,22.5],h:32,
+  desc:'Incubator and co-working campus for 146 startups. Teams get desks, cloud credits, mentors and weekly investor pitch days.',
+  k:[['Startups',146,'',0,0],['VC raised 2026',312,'$M',0,.002],['Jobs created',3900,'',0,.002],['Avg runway',19,' mo',0,0]],
+  sp:['Funding raised, $M per month',26],
+  ins:['AI-for-retail is the fastest-growing sector this quarter: 9 new teams.','Startups using shared GPU credits reach first revenue 2.3 months faster.'],
+  room:[
+   ['desks','Co-working Floor',-14,4,'Flexible desks rented by the month. Early-stage teams share space, tools and ideas.',[['Desks','380'],['Occupancy','91%']]],
+   ['stage','Pitch Stage',12,7,'Every Friday five startups pitch to investors. Winners get seed funding and mentoring.',[['Pitches this year','212'],['Funded','38']]],
+   ['screen','Investor Dashboard',0,-20,'Tracks each startup’s revenue, burn rate and runway so investors can follow progress live.',[['Portfolio value','$1.1B'],['Avg growth','14%/mo']]],
+   ['sofa','Mentor Corner',-15,14,'Experienced founders and executives give free office hours to resident teams.',[['Mentors','95'],['Sessions / month','420']]],
+   ['robot','Prototype Lab',16,-10,'3D printers, robot arms and electronics benches let hardware startups build prototypes in days.',[['Prototypes built','310'],['Avg build time','4 days']]],
+   ['kiosk','Coffee Bar',-17,-11,'Pay by phone. An AI inventory system cuts food waste by 40%.',[['Cups / day','1,100'],['Waste cut','40%']],{color:0xff7a45}]]},
+ {id:'mall',name:'Orbit E-Commerce Mall',short:'Orbit Mall',cat:'Retail · E-Commerce',c:0xd77bff,at:[22.5,22.5],h:28,
+  desc:'A shopping center that is also a fulfilment hub. Shoppers try products in person, then 61% of orders ship from here by robot and drone.',
+  k:[['Revenue today',1.94,'$M',2,.003],['Visitors',38200,'',0,.004],['Online share',61,'%',0,0],['Avg basket',54.2,'$',1,.004]],
+  sp:['Sales per hour, $K',160],
+  ins:['Electronics sales jump 22% when the weather AI forecasts rain; extra staff were scheduled.','Personalised offers raised conversion from 19% to 24% this month.'],
+  room:[
+   ['kiosk','Fashion Store',-18,-9,'Smart mirrors suggest outfits and sizes. Sales data updates stock in real time.',[['Sales today','$184K'],['Return rate','6%']],{color:0xd77bff}],
+   ['kiosk','Electronics',-4,-11,'Try devices, then pick them up from a locker or get same-day drone delivery.',[['Sales today','$412K'],['Drone deliveries','380']],{color:0x3ad7ff}],
+   ['kiosk','Food Court',10,-11,'Order from your phone. AI predicts demand so kitchens cook the right amount.',[['Meals today','6,800'],['Food waste','-45%']],{color:0xffb547}],
+   ['counter','Cashier-less Checkout',-10,10,'Cameras and shelf sensors detect what you pick. Walk out and payment happens automatically.',[['Checkout time','0 sec'],['Accuracy','99.8%']]],
+   ['screen','Sales Analytics',-31,4,'Revenue, foot traffic and conversion rate for every store, every hour.',[['Conversion','24%'],['Foot traffic','38,200']],{wall:'left'}],
+   ['hologram','AR Try-On Mirror',13,9,'Shoppers see clothes and furniture on themselves or in their home before buying.',[['Uses today','4,100'],['Sales lift','+18%']]]]},
+ {id:'data',name:'Nexus Data Center',short:'Data Center',cat:'Cloud Infrastructure',c:0x5be3a1,at:[67.5,-22.5],h:16,
+  desc:'The city’s cloud. It trains AI models for public services and rents spare computing power to local businesses.',
+  k:[['Compute',18.4,' PFLOPS',1,.01],['Uptime',99.995,'%',3,0],['Power efficiency (PUE)',1.12,'',2,.004],['Data stored',64,' PB',0,.001]],
+  sp:['GPU utilisation, %',84],
+  ins:['Waste heat from servers now warms 2,000 homes in Skyline district.','Cloud rental to local firms earned $3.6M this quarter, +27%.'],
+  room:[
+   ['racks','GPU Cluster A',-12,-9,'Thousands of GPUs train AI models for city services and rent spare capacity to businesses.',[['GPUs','8,192'],['Utilisation','87%']]],
+   ['racks','Storage Array',-12,6,'Keeps three copies of all city data in separate zones, so nothing is lost if hardware fails.',[['Capacity','64 PB'],['Durability','11 nines']]],
+   ['tank','Liquid Cooling',14,-10,'Water cooling removes heat directly from chips. The warm water heats nearby homes.',[['Water recycled','95%'],['Homes heated','2,000']]],
+   ['screen','Network Operations',0,-20,'Monitors bandwidth, outages and cyber threats across the city network.',[['Bandwidth','4 Tbps'],['Threats blocked','12,400']]],
+   ['battery','Backup Power (UPS)',14,10,'Batteries keep servers running for 15 minutes during a power cut until generators start.',[['Backup time','15 min'],['Capacity','24 MWh']]]]},
+ {id:'energy',name:'Helios Energy Grid',short:'Helios Grid',cat:'Smart Energy',c:0x9be15d,at:[67.5,-67.5],h:38,
+  desc:'Solar fields, wind turbines and a giant battery bank. AI forecasts demand 48 hours ahead and sells surplus power to neighbouring regions.',
+  k:[['Output',186,' MW',0,.02],['Renewable share',81,'%',0,.005],['Battery charge',74,'%',0,.01],['Energy revenue',41.2,'$K',1,.01]],
+  sp:['Solar + wind output, MW',180],
+  ins:['Battery will discharge at 18:30 to avoid buying peak power at $0.21/kWh.','Wind is forecast 30% stronger tonight; data center jobs were moved to 01:00.'],
+  room:[
+   ['battery','Grid Battery Bank',-14,-9,'Stores extra solar power in the day and releases it in the evening peak.',[['Capacity','420 MWh'],['Charge','74%']]],
+   ['screen','Load Forecast AI',0,-20,'Predicts demand from weather, events and business hours, then schedules supply.',[['Forecast error','2.1%'],['Horizon','48 h']]],
+   ['machine','Inverter Hall',14,-9,'Converts DC power from solar panels to AC for the grid.',[['Efficiency','98.6%'],['Inverters','64']]],
+   ['desks','Grid Control Room',-12,9,'Engineers balance supply and demand and trade surplus power with nearby regions.',[['Power exported','38 MW'],['Revenue today','$41K']]],
+   ['hologram','Smart Grid Twin',13,9,'A simulation of every cable and substation, used to find weak points before they fail.',[['Substations','36'],['Outages 2026','0']]]]},
+ {id:'logi',name:'RoboPort Logistics',short:'RoboPort',cat:'Supply Chain',c:0xffc861,at:[-67.5,67.5],h:14,
+  desc:'A fully automated warehouse. Robots store, pick and sort parcels; drones and self-driving vans deliver them across the city.',
+  k:[['Parcels today',84500,'',0,.003],['Robots active',320,'',0,.01],['On-time delivery',99.1,'%',1,.001],['Cost per parcel',0.62,'$',2,.005]],
+  sp:['Parcels per hour',9800],
+  ins:['Black Friday stock was pre-positioned 5 days early from demand forecasts.','Drone delivery is 38% cheaper than vans for parcels under 2 kg.'],
+  room:[
+   ['shelf','Automated Storage',-14,-9,'Robots fetch whole shelves and bring them to packing stations.',[['Storage slots','220K'],['Pick time','45 sec']]],
+   ['conveyor','Sorting Conveyor',2,4,'Scans every parcel and routes it to the right truck, drone or locker.',[['Parcels / hour','9,800'],['Sort accuracy','99.97%']]],
+   ['robot','Picking Robots',16,-9,'Robot arms with vision pick items of any shape, from phones to shoes.',[['Robots','320'],['Picks / hour each','600']]],
+   ['pad','Drone Launch Pad',16,12,'Drones carry parcels under 3 kg to rooftops within 8 km in about 15 minutes.',[['Flights today','1,140'],['Avg delivery','15 min']]],
+   ['screen','Demand Forecast',0,-20,'Predicts what people will order next week so stock sits close to customers in advance.',[['Forecast accuracy','93%'],['Stock-outs','0.4%']]]]},
+ {id:'hosp',name:'Nexus AI Hospital',short:'AI Hospital',cat:'HealthTech',c:0xff6b7a,at:[67.5,22.5],h:36,
+  desc:'A 420-bed hospital where AI reads scans, predicts patient risk and manages beds, so doctors spend more time with patients.',
+  k:[['Beds',420,'',0,0],['Diagnosis accuracy',96.4,'%',1,.001],['ER wait',11,' min',0,.06],['Telehealth visits',2760,'',0,.01]],
+  sp:['Patients seen per hour',140],
+  ins:['Flu cases forecast to rise 15% next week; 20 extra beds prepared.','AI imaging cut average scan reading time from 25 to 10 minutes.'],
+  room:[
+   ['bed','Smart ICU Beds',-14,4,'Sensors track heart rate, breathing and movement. AI alerts nurses before a patient gets worse.',[['ICU beds','48'],['Early alerts today','23']]],
+   ['robot','Surgical Robot',12,4,'Surgeons control precise robotic arms for minimally invasive operations.',[['Operations 2026','1,920'],['Recovery time','-35%']]],
+   ['screen','Patient Flow Monitor',0,-20,'Bed availability and waiting times across all departments.',[['Beds free','37'],['ER wait','11 min']]],
+   ['machine','AI Imaging (MRI)',15,-10,'Image AI pre-reads scans and highlights possible problems for radiologists.',[['Scans / day','260'],['Reading time','-60%']]],
+   ['counter','Reception',-12,-11,'Check in by app or face scan; a triage chatbot sends you to the right department.',[['Check-in','90 sec'],['Languages','9']]]]},
+ {id:'uni',name:'Nexus Tech University',short:'Tech University',cat:'Education · Research',c:0x7c95ff,at:[-67.5,-22.5],h:36,
+  desc:'Where the city’s future workforce learns AI, data and business. Companies co-fund labs and hire 94% of graduates.',
+  k:[['Students',12400,'',0,0],['AI & business courses',86,'',0,0],['Research grants',48,'$M',0,0],['Graduate employment',94,'%',0,0]],
+  sp:['Online learners, thousands',22],
+  ins:['Most-demanded skill by city employers this year: AI product management.','Joint lab with Quantum Bank produced 6 patents in credit-risk AI.'],
+  room:[
+   ['stage','Lecture Hall',-10,4,'Hybrid lectures stream live; AI writes subtitles and summaries in 3 languages.',[['Seats','600'],['Online viewers','2,300']]],
+   ['desks','AI Research Lab',14,8,'Students and companies research AI for business: forecasting, chatbots, automation.',[['Papers 2026','148'],['Industry partners','62']]],
+   ['screen','Research Output',0,-20,'Live tracker of publications, patents and startup spin-offs.',[['Patents','37'],['Spin-offs','21']]],
+   ['robot','Robotics Club',16,-9,'Students build robots for logistics and manufacturing competitions.',[['Members','240'],['Trophies','14']]],
+   ['shelf','Smart Library',-16,-10,'Robots retrieve books; an AI librarian recommends sources for any topic.',[['Books','480K'],['E-resources','2.1M']]]]},
+ {id:'fact',name:'Factory 4.0',short:'Factory 4.0',cat:'Smart Manufacturing',c:0x4fd1c5,at:[-67.5,22.5],h:30,
+  desc:'A lights-out factory where robots build electric scooters. Sensors predict machine failures days before they happen.',
+  k:[['Units / hour',1850,'',0,.02],['Equipment efficiency',88,'%',0,.005],['Defect rate',0.3,'%',1,.05],['Cost per unit',212,'$',0,.004]],
+  sp:['Units produced per hour',1850],
+  ins:['Bearing on Line 3 shows early wear; repair scheduled for Sunday, avoiding 9 h downtime.','Switching to night production saves $4,800/day on electricity.'],
+  room:[
+   ['robot','Welding Robots',-14,-9,'Robot arms weld frames with 0.1 mm precision, 24 hours a day.',[['Robots','48'],['Precision','0.1 mm']]],
+   ['conveyor','Assembly Line',0,6,'Products move through 30 stations. Sensors check quality at every step.',[['Units / hour','1,850'],['Defect rate','0.3%']]],
+   ['machine','3D Printers',14,-9,'Print spare parts on demand instead of storing them.',[['Parts / day','3,200'],['Storage cost','-28%']]],
+   ['screen','Digital Twin Monitor',0,-20,'Vibration and heat data predict failures before they happen.',[['Efficiency','88%'],['Downtime','-41%']]],
+   ['robot','Quality Inspection',-16,13,'Camera AI inspects every surface and rejects faulty units.',[['Checks / hour','1,850'],['Missed defects','<0.01%']]]]},
+ {id:'mob',name:'Mobility Hub',short:'Mobility Hub',cat:'Transport',c:0x52a8ff,at:[22.5,67.5],h:26,
+  desc:'Home of 640 self-driving robotaxis and 280 fast chargers. One ticket covers metro, bus, bike and taxi.',
+  k:[['Robotaxis',640,'',0,0],['Trips today',22800,'',0,.004],['Avg pickup',3.4,' min',1,.04],['Avg fare',3.1,'$',2,.01]],
+  sp:['Trips per hour',1900],
+  ins:['Concert at 20:00: 120 robotaxis will be pre-positioned near Orbit Mall.','Shared rides cut empty kilometres by 30% compared with 2025.'],
+  room:[
+   ['charger','Fast Chargers',-14,-7,'Charge an EV to 80% in 18 minutes. Prices drop when solar power is plentiful.',[['Chargers','280'],['Avg charge','18 min']]],
+   ['charger','Robotaxi Bay',-14,10,'Self-driving taxis charge, get cleaned and return to service automatically.',[['Robotaxis','640'],['Trips today','22,800']]],
+   ['screen','Fleet Dispatch AI',0,-20,'Sends taxis to where demand will be in 10 minutes, so pickups stay fast.',[['Avg pickup','3.4 min'],['Empty km','-30%']]],
+   ['counter','Ticket Kiosks',12,-8,'One ticket for all transport; the best fare is calculated at the end of the trip.',[['Tickets today','58K'],['Avg fare','$1.40']]],
+   ['sofa','Passenger Lounge',14,10,'Wi-Fi, charging and live departure boards while you wait.',[['Seats','120'],['Avg wait','6 min']]]]},
+ {id:'park',name:'Central Green Park',short:'Green Park',cat:'Environment',c:0x6fd66a,at:[-22.5,67.5],h:12,
+  desc:'The city’s lungs. 2,400 trees and a network of air sensors. The glass Eco Pavilion inside runs entirely on its own solar roof.',
+  k:[['Air quality (AQI)',28,'',0,.04],['Trees',2400,'',0,0],['Temperature',18,'°C',0,.02],['Visitors today',6100,'',0,.01]],
+  sp:['PM2.5 µg/m³, last 24 h',9],
+  ins:['Air is cleanest 07:00–09:00; the city app suggests jogging routes for that window.','Park cools nearby streets by 3°C, cutting office air-conditioning costs.'],
+  room:[
+   ['plant','Vertical Garden',0,-19,'A living wall of 9,000 plants that filters air and cools the pavilion.',[['Plants','9,000'],['Temp drop','-4°C']]],
+   ['screen','Air Quality Station',-31,-4,'Sensors measure PM2.5, CO₂ and noise and publish open data every minute.',[['PM2.5','8 µg/m³'],['CO₂','412 ppm']],{wall:'left'}],
+   ['kiosk','Eco Café',14,-9,'Zero-waste café with local food and compostable packaging.',[['Waste recycled','97%'],['Local food','80%']],{color:0x6fd66a}],
+   ['sofa','Reading Area',-12,8,'Quiet space with free Wi-Fi, powered by the pavilion’s solar roof.',[['Seats','60'],['Solar share','100%']]],
+   ['plant','Seed Library',12,10,'Residents borrow seeds and sensors to grow food on their balconies.',[['Members','1,300'],['Harvest 2026','6 t']]]]},
+ {id:'home',name:'Skyline Smart Homes',short:'Skyline Homes',cat:'Smart Living',c:0xb88cff,at:[22.5,-67.5],h:50,
+  desc:'Three residential towers for 8,600 people. Homes manage their own energy, deliveries and security, and sell rooftop solar back to the grid.',
+  k:[['Residents',8600,'',0,0],['Energy saved',34,'%',0,0],['Occupancy',96,'%',0,0],['Avg rent',820,'$',0,0]],
+  sp:['Rooftop solar sold, kWh/h',640],
+  ins:['Residents earned $46 each last month from selling solar power.','Parcel lockers cut failed deliveries to near zero.'],
+  room:[
+   ['sofa','Living Room',-12,6,'Lights, blinds and temperature adjust to the time of day and who is home.',[['Comfort score','9.2/10'],['Energy saved','34%']]],
+   ['hologram','Home AI Assistant',4,4,'Manages bills, deliveries, appointments and home security by voice.',[['Tasks / day','38'],['Bills automated','100%']]],
+   ['screen','Energy Monitor',0,-20,'Shows each appliance’s energy use and solar income.',[['Solar income','$46/mo'],['Usage','-34%']]],
+   ['bed','Bedroom',16,-8,'Sleep sensors adjust temperature and wake you with gradual light.',[['Sleep score','86'],['Noise','28 dB']]],
+   ['counter','Smart Kitchen',-14,-10,'The fridge tracks food and orders groceries; recipes use what you have.',[['Food waste','-50%'],['Auto orders','6/mo']]]]},
+];
+const byId = Object.fromEntries(B.map(b=>[b.id,b]));
+
+/* ================= RENDERER ================= */
+const canvas = $('#scene');
+let renderer;
+try{
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+}catch(e){
+  $('#loading').textContent = 'WebGL is not available in this browser, so the 3D city cannot be shown.';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const camera = new THREE.PerspectiveCamera(48, 1, 0.5, 2500);
+camera.position.set(170, 135, 175);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = .07;
+controls.maxPolarAngle = Math.PI*0.47; controls.minDistance = 18; controls.maxDistance = 420;
+controls.target.set(0,8,0);
+controls.autoRotate = !reduceMotion; controls.autoRotateSpeed = .35;
+controls.screenSpacePanning = false;
+
+/* ================= MATERIAL HELPERS ================= */
+const anims = [];      // per-frame callbacks for the city
+const glowMats = [];   // {m, day, night}
+function M(color,o={}){
+  const m = new THREE.MeshStandardMaterial({color, roughness:o.r??.6, metalness:o.m??.1,
+    emissive:o.e??0x000000, emissiveIntensity:o.ei??1, transparent:!!o.t, opacity:o.op??1, wireframe:!!o.w, side:o.side??THREE.FrontSide});
+  if(o.glow) glowMats.push({m, day:o.glow[0], night:o.glow[1]});
+  return m;
+}
+function box(w,h,d,mat){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.castShadow=true;m.receiveShadow=true;return m;}
+function cyl(rt,rb,h,mat,seg=24){const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat);m.castShadow=true;m.receiveShadow=true;return m;}
+function at(o,x,y,z){o.position.set(x,y,z);return o;}
+
+/* facade textures */
+function facade(seed){
+  const W=128,H=256, a=document.createElement('canvas'), e=document.createElement('canvas');
+  a.width=e.width=W; a.height=e.height=H;
+  const ca=a.getContext('2d'), ce=e.getContext('2d');
+  ca.fillStyle='#d9dee5'; ca.fillRect(0,0,W,H);
+  ce.fillStyle='#000'; ce.fillRect(0,0,W,H);
+  const cols=6, rows=12, cw=W/cols, rh=H/rows;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const x=c*cw+3,y=r*rh+3,w=cw-6,h=rh-6;
+    ca.fillStyle = seed%2? '#2c3c52':'#344863'; ca.fillRect(x,y,w,h);
+    ca.fillStyle='rgba(255,255,255,.18)'; ca.fillRect(x,y,w,2);
+    if(Math.random()<.5){ ce.fillStyle = Math.random()<.75? '#ffd9a0' : '#bfeaff'; ce.globalAlpha = rand(.55,1); ce.fillRect(x,y,w,h); ce.globalAlpha=1; }
+  }
+  const map=new THREE.CanvasTexture(a), em=new THREE.CanvasTexture(e);
+  for(const t of [map,em]){t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;}
+  return {map,em};
+}
+const FAC=[facade(0),facade(1),facade(2)];
+const headMat = M(0xffffff,{e:0xfff3c4,ei:.2,glow:[.2,3]});
+const tailMat = M(0x550000,{e:0xff2020,ei:.3,glow:[.3,2.5]});
+const roofMat = M(0x4a5260,{r:.8});
+const windowMats=[];
+function tower(w,h,d,tint=0xffffff,v=0){
+  const f=FAC[v%FAC.length];
+  const map=f.map.clone(), em=f.em.clone(); map.needsUpdate=em.needsUpdate=true;
+  const rx=Math.max(1,Math.round(w/8)), ry=Math.max(1,Math.round(h/9));
+  map.repeat.set(rx,ry); em.repeat.set(rx,ry);
+  const side=new THREE.MeshStandardMaterial({color:tint,map,emissiveMap:em,emissive:0xffffff,emissiveIntensity:0,roughness:.35,metalness:.35});
+  windowMats.push(side);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[side,side,roofMat,roofMat,side,side]);
+  m.castShadow=m.receiveShadow=true; return m;
+}
+
+/* ================= SCENE: CITY ================= */
+const city = new THREE.Scene();
+const DAY={bg:0xa9c9e2, fog:0xa9c9e2}, NIGHT={bg:0x060a14, fog:0x060a14};
+city.background = new THREE.Color(DAY.bg);
+city.fog = new THREE.Fog(DAY.fog, 260, 900);
+const hemi = new THREE.HemisphereLight(0xdfeeff, 0x3a4a3a, 1.1); city.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
+sun.position.set(130,190,90); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-140,right:140,top:140,bottom:-140,near:10,far:520});
+sun.shadow.bias = -0.0004;
+city.add(sun);
+const moonFill = new THREE.AmbientLight(0x6f86c9, 0); city.add(moonFill);
+
+// ground, water
+const grass = new THREE.Mesh(new THREE.PlaneGeometry(2400,2400), M(0x6c8c5a,{r:1}));
+grass.rotation.x=-Math.PI/2; grass.position.y=-1.02; grass.receiveShadow=true; city.add(grass);
+const water = new THREE.Mesh(new THREE.PlaneGeometry(500,2400), M(0x2f6f93,{r:.15,m:.4}));
+water.rotation.x=-Math.PI/2; water.position.set(360,-0.8,0); city.add(water);
+const base = box(188,1,188,M(0x2c313a,{r:.9})); base.position.y=-.5; base.castShadow=false; city.add(base);
+const ROADS=[-90,-45,0,45,90], CELLS=[-67.5,-22.5,22.5,67.5], LIGHTS=[-45,0,45], HALF=94, LEN=188;
+const walkMat = M(0x9aa3ae,{r:.9});
+for(const x of CELLS)for(const z of CELLS){const s=box(37,.5,37,walkMat);s.castShadow=false;at(s,x,.25,z);city.add(s);}
+// lane dashes
+{
+  const geo=new THREE.BoxGeometry(3,.06,.35), mat=M(0xe8e2c8,{r:.8});
+  const pos=[];
+  for(const r of ROADS)for(let p=-92;p<92;p+=7){
+    if(ROADS.some(q=>Math.abs(p+1.5-q)<6))continue;
+    pos.push([p+1.5,r,0]); pos.push([r,p+1.5,1]);
+  }
+  const im=new THREE.InstancedMesh(geo,mat,pos.length); const o=new THREE.Object3D();
+  pos.forEach((q,i)=>{ if(q[2]===0){o.position.set(q[0],.03,q[1]);o.rotation.y=0;} else {o.position.set(q[0],.03,q[1]);o.rotation.y=Math.PI/2;} o.updateMatrix(); im.setMatrixAt(i,o.matrix);});
+  city.add(im);
+}
+// street lamps
+const bulbMat = M(0xfff2cc,{e:0xffd98a,ei:0,glow:[0,2.2]});
+{
+  const pts=[]; for(const r of ROADS)for(let p=-80;p<=80;p+=26){ if(ROADS.some(q=>Math.abs(p-q)<6))continue; pts.push([p,r+5.3],[r+5.3,p]); }
+  const pole=new THREE.InstancedMesh(new THREE.CylinderGeometry(.12,.15,5,6),M(0x39404a),pts.length);
+  const bulb=new THREE.InstancedMesh(new THREE.SphereGeometry(.45,8,6),bulbMat,pts.length);
+  const o=new THREE.Object3D();
+  pts.forEach((q,i)=>{o.position.set(q[0],2.5,q[1]);o.updateMatrix();pole.setMatrixAt(i,o.matrix);o.position.y=5.1;o.updateMatrix();bulb.setMatrixAt(i,o.matrix);});
+  city.add(pole,bulb);
+}
+// trees (instanced)
+const treeSpots=[];
+function addTree(x,z,s=1){treeSpots.push([x,z,s]);}
+function buildTrees(){
+  const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(.25,.35,2.4,6),M(0x6b4f37),treeSpots.length);
+  const crown=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.8,0),M(0x4f8f45,{r:.9}),treeSpots.length);
+  trunk.castShadow=crown.castShadow=true;
+  const o=new THREE.Object3D(), col=new THREE.Color();
+  treeSpots.forEach(([x,z,s],i)=>{
+    o.scale.set(s,s,s); o.position.set(x,.5+1.2*s,z); o.rotation.set(0,0,0); o.updateMatrix(); trunk.setMatrixAt(i,o.matrix);
+    o.position.y=.5+3.3*s; o.rotation.y=rand(0,6); o.updateMatrix(); crown.setMatrixAt(i,o.matrix);
+    crown.setColorAt(i,col.setHSL(rand(.25,.33),rand(.35,.5),rand(.3,.42)));
+  });
+  city.add(trunk,crown);
+}
+// stars
+const stars = new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(
+  Array.from({length:1800},(_,i)=>{const k=i%3; return k===1? rand(150,700) : rand(-1200,1200);}),3)),
+  new THREE.PointsMaterial({color:0xcfe0ff,size:1.6,sizeAttenuation:false,fog:false}));
+stars.visible=false; city.add(stars);
+
+/* ---------- landmark builders ---------- */
+const landmarks=[]; // {def, group}
+function mk(def, build){
+  const g=new THREE.Group(); g.position.set(def.at[0],.5,def.at[1]);
+  build(g,def); g.traverse(o=>{o.userData.bid=def.id;});
+  city.add(g); landmarks.push({def,group:g}); return g;
+}
+const C = id=>byId[id].c;
+const neon = (c,ei=1.4)=>M(c,{e:c,ei:ei*.4,glow:[ei*.4,ei*1.6]});
+
+mk(byId.core,(g)=>{
+  g.add(at(box(28,2,28,M(0x3a4352,{r:.7})),0,1,0));
+  g.add(at(tower(13,58,13,0xb9dcf5,1),0,31,0));
+  g.add(at(tower(8,14,20,0xcfd8e2,0),-11,9,0));
+  g.add(at(tower(8,20,20,0xcfd8e2,2),11,12,0));
+  g.add(at(cyl(7.5,8,4,M(0x1c2430,{m:.6,r:.3})),0,62,0));
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(11,.4,10,64),neon(C('core'),2)); ring.rotation.x=Math.PI/2; at(ring,0,65,0); g.add(ring);
+  const ring2=new THREE.Mesh(new THREE.TorusGeometry(8,.25,8,48),neon(C('core'),2)); at(ring2,0,70,0); g.add(ring2);
+  const holo=new THREE.Mesh(new THREE.IcosahedronGeometry(4.2,1),M(C('core'),{e:C('core'),ei:1.2,w:true})); at(holo,0,73,0); g.add(holo);
+  const core=new THREE.Mesh(new THREE.IcosahedronGeometry(2,0),M(0xffffff,{e:C('core'),ei:2})); at(core,0,73,0); g.add(core);
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.6,.6,120,12,1,true),new THREE.MeshBasicMaterial({color:C('core'),transparent:true,opacity:0,depthWrite:false}));
+  at(beam,0,135,0); g.add(beam); g.userData.beam=beam;
+  anims.push((t)=>{ring.rotation.z=t*.4; ring2.rotation.y=t*.9; ring2.rotation.x=Math.sin(t*.5)*.4; holo.rotation.y=t*.6; holo.rotation.x=t*.3; core.rotation.y=-t; holo.position.y=73+Math.sin(t*1.4)*.6;});
+});
+mk(byId.bank,(g)=>{
+  g.add(at(tower(14,50,14,0x9fb6cf,0),-5,25,-3));
+  g.add(at(tower(11,38,11,0xb6c6d8,2),8,19,6));
+  const gold=M(C('bank'),{m:.85,r:.25,e:C('bank'),ei:.03,glow:[.03,.12]});
+  const pyr=new THREE.Mesh(new THREE.ConeGeometry(9.9,9,4),gold); pyr.rotation.y=Math.PI/4; at(pyr,-5,54.5,-3); pyr.castShadow=true; g.add(pyr);
+  g.add(at(box(11.6,1.2,11.6,gold),8,38.6,6));
+  g.add(at(box(30,5,8,M(0x24303f,{m:.5,r:.2})),0,2.5,13));
+  g.add(at(box(30.4,.6,8.4,gold),0,5.3,13));
+  const coin=new THREE.Mesh(new THREE.CylinderGeometry(3,3,.6,32),gold); coin.rotation.x=Math.PI/2; at(coin,8,44,6); g.add(coin);
+  anims.push(t=>{coin.rotation.z=0; coin.rotation.y=t*1.2;});
+});
+mk(byId.startup,(g)=>{
+  const a=tower(22,8,17,0xffe2cf,1); at(a,0,4,0); g.add(a);
+  const b=tower(19,8,14,0xd8f3ee,0); at(b,2,12,1); b.rotation.y=.28; g.add(b);
+  const c=tower(15,8,12,0xffe2cf,2); at(c,-1,20,-1); c.rotation.y=-.22; g.add(c);
+  g.add(at(box(13,1,10,M(0x5aa548,{r:1})),-1,24.5,-1));
+  for(let i=0;i<5;i++){g.add(at(box(.5,24,.5,neon(C('startup'),1.4)),-11+i*5.5,12,8.8));}
+  const sign=new THREE.Mesh(new THREE.TorusGeometry(2.4,.35,8,32),neon(C('startup'),2)); at(sign,-1,28.5,-1); g.add(sign);
+  anims.push(t=>{sign.rotation.y=t;});
+});
+mk(byId.mall,(g)=>{
+  const body=cyl(15,15.5,10,M(0xece6f2,{r:.5}),48); at(body,0,5,0); g.add(body);
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(13.5,40,20,0,Math.PI*2,0,Math.PI/2),M(0x9fd8ff,{t:true,op:.6,m:.4,r:.1,e:0x9fd8ff,ei:0,glow:[0,.5]}));
+  at(dome,0,10,0); g.add(dome);
+  const r1=new THREE.Mesh(new THREE.TorusGeometry(15.6,.45,8,64),neon(C('mall'),2)); r1.rotation.x=Math.PI/2; at(r1,0,9.6,0); g.add(r1);
+  const r2=new THREE.Mesh(new THREE.TorusGeometry(15.6,.3,8,64),neon(0x3ad7ff,1.6)); r2.rotation.x=Math.PI/2; at(r2,0,3,0); g.add(r2);
+  g.add(at(box(10,6,5,M(0x2a2f3b,{m:.5,r:.2})),0,3,15));
+  const bag=new THREE.Mesh(new THREE.TorusKnotGeometry(2.2,.6,64,8),neon(C('mall'),2)); at(bag,0,27,0); g.add(bag);
+  anims.push(t=>{bag.rotation.y=t*.8; bag.position.y=27+Math.sin(t*1.3)*.8;});
+});
+mk(byId.data,(g)=>{
+  g.add(at(box(30,10,24,M(0x2b323d,{r:.5,m:.4})),0,5,0));
+  const leds=[];
+  for(let i=0;i<4;i++){const l=box(30.2,.35,.3,M(C('data'),{e:C('data'),ei:1})); at(l,0,2+i*2,12.1); g.add(l); leds.push(l.material);}
+  for(let i=0;i<3;i++)for(let j=0;j<2;j++){const f=cyl(2.4,2.4,2,M(0x8d96a3,{m:.6,r:.4}),20); at(f,-9+i*9,11,-5+j*10); g.add(f);
+    const fan=box(4.2,.1,.5,M(0x222831)); at(fan,-9+i*9,12.05,-5+j*10); g.add(fan); anims.push(t=>{fan.rotation.y=t*6+i;});}
+  anims.push(t=>{leds.forEach((m,i)=>m.emissiveIntensity=.6+Math.max(0,Math.sin(t*3+i*1.7))*1.6);});
+});
+mk(byId.energy,(g)=>{
+  const pm=M(0x1d3a6b,{m:.7,r:.25,e:0x0a1a40,ei:.2}), fr=M(0x9aa3ae);
+  for(let i=0;i<4;i++)for(let j=0;j<5;j++){const p=box(5,.2,3.2,pm); p.rotation.x=-.45; at(p,-14+i*5.4,1.6,-14+j*4.6); g.add(p); g.add(at(box(.2,1.2,.2,fr),-14+i*5.4,.6,-14+j*4.6));}
+  for(let i=0;i<3;i++){const bt=box(7,3.2,2.8,M(0xf2f4f7,{r:.4})); at(bt,-12+i*8,1.6,13.5); g.add(bt);
+    g.add(at(box(7.05,.5,2.85,neon(C('energy'),1.5)),-12+i*8,2.6,13.5));}
+  for(const z of [-12,0,12]){
+    const t=cyl(.5,.9,30,M(0xf4f6f8,{r:.4}),12); at(t,11,15,z); g.add(t);
+    g.add(at(box(2.8,1.4,1.4,M(0xf4f6f8)),11,30.4,z));
+    const rot=new THREE.Group(); at(rot,9.4,30.4,z);
+    for(let k=0;k<3;k++){const bl=box(.3,11,.9,M(0xffffff,{r:.4})); bl.position.y=5.5; const piv=new THREE.Group(); piv.rotation.x=k*Math.PI*2/3; piv.add(bl); rot.add(piv);}
+    g.add(rot); const sp=rand(.9,1.3), ph=rand(0,6); anims.push(tt=>{rot.rotation.x=tt*sp+ph;});
+  }
+});
+mk(byId.logi,(g)=>{
+  g.add(at(box(32,9,22,M(0xd0d4da,{r:.6})),0,4.5,0));
+  g.add(at(box(32.4,.6,22.4,M(0x5b6371)),0,9.3,0));
+  for(let i=0;i<6;i++){g.add(at(box(3.2,4.2,.3,M(0x39404b)),-12.5+i*5,2.1,11.1)); g.add(at(box(3.2,.3,.35,neon(C('logi'),1.5)),-12.5+i*5,4.5,11.15));}
+  for(let i=0;i<3;i++){const pad=cyl(2.6,2.6,.2,M(0x2f3640),24); at(pad,-10+i*10,9.7,-2); g.add(pad);
+    const rr=new THREE.Mesh(new THREE.TorusGeometry(2.4,.15,6,32),neon(C('logi'),2)); rr.rotation.x=Math.PI/2; at(rr,-10+i*10,9.85,-2); g.add(rr);}
+  for(let i=0;i<2;i++){g.add(at(box(8,3.4,3,M(0xf1f1f1)),-8+i*14,2.2,15.2)); g.add(at(box(2.6,2.6,3,M(C('logi'))),-13.2+i*14,1.8,15.2));}
+});
+mk(byId.hosp,(g)=>{
+  g.add(at(tower(12,30,12,0xeef3f6,0),0,15,0));
+  g.add(at(tower(30,14,10,0xe6eef2,2),0,7,0));
+  const red=neon(C('hosp'),2);
+  g.add(at(box(6,1.6,.6,red),0,25,6.3)); g.add(at(box(1.6,6,.6,red),0,25,6.3));
+  g.add(at(cyl(4.8,4.8,.3,M(0x39424f),32),0,30.15,0));
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(4.3,.18,6,40),neon(0xffffff,1.2)); ring.rotation.x=Math.PI/2; at(ring,0,30.35,0); g.add(ring);
+  g.add(at(box(8,4,4,M(0x2a3644,{m:.4,r:.2})),0,2,8));
+  for(const [x,z] of [[-12,10],[12,10],[-12,-10],[12,-10]]) addTree(67.5+x,22.5+z,1);
+});
+mk(byId.uni,(g)=>{
+  g.add(at(tower(28,14,16,0xeadcc0,1),0,7,-1));
+  const col=M(0xf3ead7,{r:.7});
+  for(let i=0;i<6;i++)g.add(at(cyl(.7,.75,10,col,12),-10+i*4,5,9.5));
+  g.add(at(box(25,1.2,4.4,col),0,10.6,9.5));
+  const ped=new THREE.Mesh(new THREE.CylinderGeometry(3.5,3.5,25,3),col); ped.rotation.z=Math.PI/2; ped.rotation.y=0; ped.scale.set(1,1,.6); at(ped,0,12.4,9.5); ped.castShadow=true; g.add(ped);
+  g.add(at(tower(6,28,6,0xeadcc0,0),-10,14,-5));
+  const spire=new THREE.Mesh(new THREE.ConeGeometry(4.3,7,4),M(C('uni'),{m:.4,r:.4})); spire.rotation.y=Math.PI/4; at(spire,-10,31.5,-5); spire.castShadow=true; g.add(spire);
+  const clock=cyl(1.8,1.8,.3,neon(0xffffff,1.2),24); clock.rotation.x=Math.PI/2; at(clock,-10,24,-1.9); g.add(clock);
+  for(const [x,z] of [[-14,13],[14,13],[14,-14]]) addTree(-67.5+x,-22.5+z,1.1);
+});
+mk(byId.fact,(g)=>{
+  g.add(at(box(30,11,20,M(0xb8bfc8,{r:.6})),0,5.5,0));
+  const pm=M(0x6d7785,{r:.5});
+  for(let i=0;i<4;i++){const p=new THREE.Mesh(new THREE.CylinderGeometry(2.6,2.6,20,3),pm); p.rotation.x=Math.PI/2; at(p,-11.25+i*7.5,12.2,0); p.castShadow=true; g.add(p);}
+  for(const [x,z] of [[11,-11],[6,-12]]){
+    g.add(at(cyl(1.3,1.6,20,M(0xe3e6ea),16),x,10,z));
+    for(let k=0;k<3;k++)g.add(at(cyl(1.4,1.4,.6,neon(C('fact'),1.4),16),x,13+k*3,z));
+  }
+  const steam=[]; for(let k=0;k<5;k++){const s=new THREE.Mesh(new THREE.SphereGeometry(1.4,10,8),new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:.35,depthWrite:false})); at(s,11,21,-11); g.add(s); steam.push(s);}
+  anims.push(t=>{steam.forEach((s,i)=>{const p=((t*.25+i/5)%1); s.position.y=21+p*12; s.position.x=11+p*4; s.scale.setScalar(.6+p*1.6); s.material.opacity=.4*(1-p);});});
+  g.add(at(box(8,2,5,M(C('fact'),{r:.5})),-8,1,13));
+});
+mk(byId.mob,(g)=>{
+  const roof=box(25,1,21,M(0xf2f4f6,{r:.4})); at(roof,4,8.5,0); g.add(roof);
+  g.add(at(box(25.2,.4,21.2,neon(C('mob'),1.4)),4,7.9,0));
+  for(const x of [-7,4,15])for(const z of [-9,9])g.add(at(cyl(.45,.45,8,M(0xa0a8b2),10),x,4,z));
+  for(let i=0;i<5;i++){g.add(at(box(.7,2.4,.6,neon(0x5be3a1,1.2)),-6+i*5,1.2,-4)); const car=makeCar(pick([0xffffff,0x3ad7ff,0xff7a45,0x9fb6cf]),true); car.rotation.y=Math.PI/2; at(car,-6+i*5,0,-1); g.add(car);}
+  g.add(at(tower(8,22,8,0xd6e6f5,1),-13,11,-9));
+  const disc=new THREE.Mesh(new THREE.TorusGeometry(3,.3,8,32),neon(C('mob'),2)); at(disc,-13,25,-9); g.add(disc);
+  anims.push(t=>{disc.rotation.y=t*1.1;});
+});
+mk(byId.park,(g)=>{
+  g.add(at(box(36,.4,36,M(0x5c9a48,{r:1})),0,.2,0));
+  const pond=cyl(6.5,6.5,.15,M(0x3d8fb8,{r:.1,m:.3}),40); at(pond,7,.45,7); g.add(pond);
+  const path=box(36,.06,2.4,M(0xd8cfb8,{r:1})); at(path,0,.43,-2); g.add(path);
+  const pav=cyl(4.5,4.5,4.4,M(0xbfe8ff,{t:true,op:.55,m:.3,r:.1,e:0xbfe8ff,ei:0,glow:[0,.6]}),32); at(pav,-9,2.6,-9); g.add(pav);
+  g.add(at(cyl(5.4,5.4,.5,M(0x22344a,{m:.6,r:.3}),32),-9,5.05,-9));
+  const ftn=new THREE.Mesh(new THREE.ConeGeometry(.8,3.5,10),M(0xbfe8ff,{t:true,op:.6,e:0x9fdcff,ei:.4})); at(ftn,7,2,7); g.add(ftn);
+  anims.push(t=>{ftn.scale.y=.8+Math.sin(t*3)*.25;});
+  const sensor=[]; for(const [x,z] of [[13,-12],[-14,12]]){g.add(at(cyl(.15,.15,4,M(0x9aa3ae),6),x,2.2,z)); const s=new THREE.Mesh(new THREE.SphereGeometry(.6,10,8),neon(C('park'),2)); at(s,x,4.4,z); g.add(s); sensor.push(s);}
+  for(let i=0;i<30;i++){const x=rand(-16,16), z=rand(-16,16); if(Math.hypot(x-7,z-7)<8||Math.hypot(x+9,z+9)<7||Math.abs(z+2)<2.2)continue; addTree(-22.5+x,67.5+z,rand(.8,1.3));}
+});
+mk(byId.home,(g)=>{
+  const T=[[-9,-6,9,34,0xe6dcf7],[6,-8,9,44,0xd9e4f2],[3,9,10,28,0xf0e6dc]];
+  T.forEach(([x,z,w,h,c],i)=>{g.add(at(tower(w,h,w,c,i),x,h/2,z));
+    for(let y=4;y<h-2;y+=4)g.add(at(box(w+.8,.25,1.4,M(0xf4f4f6,{r:.5})),x,y,z+w/2+.5));
+    const sol=box(w-2,.3,w-2,M(0x1d3a6b,{m:.7,r:.25})); sol.rotation.x=-.2; at(sol,x,h+.6,z); g.add(sol);});
+  g.add(at(box(9.2,.4,9.2,neon(C('home'),1.6)),6,44.2,-8));
+});
+
+// filler blocks
+const fillerTints=[0xd7dfe8,0xc7d3e0,0xe8e1d6,0xbcc8d6,0xdfe6ee];
+for(const [cx,cz] of [[-67.5,-67.5],[-22.5,-67.5],[67.5,67.5]]){
+  for(const [ox,oz] of [[-9,-9],[9,-9],[-9,9],[9,9]]){
+    const w=rand(9,14), d=rand(9,14), h=rand(12,42);
+    const t=tower(w,h,d,pick(fillerTints),Math.floor(rand(0,3)));
+    at(t,cx+ox,.5+h/2,cz+oz); city.add(t);
+  }
+  addTree(cx-16,cz+16,1); addTree(cx+16,cz-16,1); addTree(cx+16,cz+16,1);
+}
+// trees along core blocks' corners
+for(const id of ['core','bank','startup','mall','data','logi','fact','mob','home']){const [x,z]=byId[id].at; addTree(x-16.5,z+16.5,.9); addTree(x+16.5,z-16.5,.9);}
+// shoreline trees
+for(let z=-110;z<=110;z+=9) addTree(rand(100,106),z,rand(.9,1.3));
+buildTrees();
+
+/* ---------- traffic lights ---------- */
+const lights={};
+for(const ix of LIGHTS)for(const iz of LIGHTS){
+  const L={axis:Math.random()<.5?'x':'z',t:rand(0,5),clear:0,q:{x:0,z:0},heads:{}};
+  for(const ax of ['x','z']){
+    const g=new THREE.Group();
+    g.add(at(cyl(.15,.15,6,M(0x2f353e),6),0,3,0));
+    g.add(at(box(.8,2,.8,M(0x1b1f26)),0,6.4,0));
+    const red=new THREE.MeshStandardMaterial({color:0x330a0a,emissive:0xff2a2a,emissiveIntensity:0});
+    const grn=new THREE.MeshStandardMaterial({color:0x0a2a14,emissive:0x2aff7a,emissiveIntensity:0});
+    g.add(at(new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),red),0,6.9,.42));
+    g.add(at(new THREE.Mesh(new THREE.SphereGeometry(.32,10,8),grn),0,5.95,.42));
+    if(ax==='x'){at(g,ix-5.5,0,iz+5.5); g.rotation.y=-Math.PI/2;} else {at(g,ix+5.5,0,iz+5.5);}
+    city.add(g); L.heads[ax]={red,grn};
+  }
+  lights[ix+','+iz]=L;
+}
+
+/* ---------- cars ---------- */
+function makeCar(color,taxi=false){
+  const g=new THREE.Group();
+  g.add(at(box(3.4,1,1.7,M(color,{m:.5,r:.35})),0,.75,0));
+  g.add(at(box(1.9,.8,1.5,M(0x1d2733,{m:.6,r:.15})),-.2,1.6,0));
+  g.add(at(box(.08,.3,1.3,headMat),1.72,.85,0));
+  g.add(at(box(.08,.3,1.3,tailMat),-1.72,.85,0));
+  if(taxi) g.add(at(box(.8,.25,.6,M(0x3ad7ff,{e:0x3ad7ff,ei:1.5})),-.2,2.15,0));
+  return g;
+}
+const cars=[];
+const carColors=[0xf2f2f2,0x22262e,0xc23b3b,0x2e6fd8,0xe8b13a,0x8b97a6,0x3e8f6b,0xffffff];
+for(let i=0;i<64;i++){
+  const axis=i%2?'x':'z', road=pick(ROADS), dir=Math.random()<.5?1:-1;
+  const taxi=Math.random()<.3;
+  const mesh=makeCar(taxi?0xffffff:pick(carColors),taxi);
+  city.add(mesh);
+  cars.push({axis,road,dir,p:rand(-HALF,HALF),v:0,vmax:rand(9,13),mesh});
+}
+let aiTraffic=true, trafficStats={speed:0,wait:0};
+function updateTraffic(dt){
+  for(const k in lights){const L=lights[k]; L.q.x=L.q.z=0;}
+  let sumV=0, waiting=0;
+  for(const c of cars){
+    let target=c.vmax;
+    // lights
+    if(LIGHTS.includes(c.road)){
+      for(const ic of LIGHTS){
+        const d=(ic-c.p)*c.dir-6.5;
+        if(d>-0.5 && d<22){
+          const key = c.axis==='x'? ic+','+c.road : c.road+','+ic;
+          const L=lights[key]; const green = L.clear<=0 && L.axis===c.axis;
+          if(!green){ if(c.v<1.2) L.q[c.axis]++; if(d>-0.2) target=Math.min(target, Math.sqrt(14*Math.max(0,d-.3))); }
+        }
+      }
+    }
+    // car following
+    for(const o of cars){ if(o===c||o.axis!==c.axis||o.road!==c.road||o.dir!==c.dir)continue;
+      const gap=((o.p-c.p)*c.dir+LEN)%LEN; if(gap>0 && gap<24) target=Math.min(target,Math.sqrt(14*Math.max(0,gap-5))); }
+    if(target<c.v) c.v=target; else c.v=Math.min(target,c.v+dt*5);
+    if(c.v<.05) c.v=0;
+    c.p += c.v*c.dir*dt;
+    if(c.p>HALF)c.p-=LEN; if(c.p<-HALF)c.p+=LEN;
+    if(c.axis==='x'){c.mesh.position.set(c.p,.5,c.road+2.1*c.dir); c.mesh.rotation.y=c.dir>0?0:Math.PI;}
+    else {c.mesh.position.set(c.road-2.1*c.dir,.5,c.p); c.mesh.rotation.y=c.dir>0?-Math.PI/2:Math.PI/2;}
+    sumV+=c.v; if(c.v<.5) waiting++;
+  }
+  for(const k in lights){
+    const L=lights[k]; L.t+=dt; if(L.clear>0) L.clear-=dt;
+    const other=L.axis==='x'?'z':'x';
+    let sw=false;
+    if(aiTraffic){ if(L.t>2.2 && ((L.q[other]>L.q[L.axis]+0 && L.q[other]>=1) )) sw=true; if(L.t>12 && L.q[other]>0) sw=true; }
+    else if(L.t>9) sw=true;
+    if(sw && L.clear<=0){L.axis=other; L.t=0; L.clear=1.0;}
+    for(const ax of ['x','z']){const g=L.clear<=0&&L.axis===ax; L.heads[ax].red.emissiveIntensity=g?0:2.5; L.heads[ax].grn.emissiveIntensity=g?2.5:0;}
+  }
+  trafficStats.speed += ((sumV/cars.length)*4.2 - trafficStats.speed)*Math.min(1,dt*.8);
+  trafficStats.wait += (waiting - trafficStats.wait)*Math.min(1,dt*.8);
+}
+
+/* ---------- drones ---------- */
+const hub=new THREE.Vector3(-67.5,12,67.5);
+const drones=[];
+for(let i=0;i<7;i++){
+  const g=new THREE.Group();
+  g.add(box(1.4,.4,1.4,M(0x2b313b)));
+  const pk=box(.8,.6,.8,M(C('logi'))); pk.position.y=-.5; g.add(pk);
+  const rotors=[];
+  for(const [x,z] of [[.9,.9],[-.9,.9],[.9,-.9],[-.9,-.9]]){const r=box(1.1,.05,.15,M(0x111111)); at(r,x,.3,z); g.add(r); rotors.push(r);}
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(.18,6,6),M(0xff4444,{e:0xff2020,ei:2})),0,.3,0));
+  city.add(g);
+  const d={g,rotors,from:hub.clone(),to:null,t:rand(0,1),dur:rand(9,15),out:true};
+  d.to=new THREE.Vector3(pick(B).at[0],rand(20,40),pick(B).at[1]);
+  drones.push(d);
+}
+function updateDrones(dt,t){
+  for(const d of drones){
+    d.t+=dt/d.dur;
+    if(d.t>=1){d.t=0; d.from.copy(d.to); d.out=!d.out; if(d.out){d.to=new THREE.Vector3(pick(B).at[0]+rand(-6,6),rand(20,40),pick(B).at[1]+rand(-6,6));} else d.to=hub.clone();}
+    const p=d.from.clone().lerp(d.to,d.t); p.y+=Math.sin(Math.PI*d.t)*22+3;
+    d.g.lookAt(p.x,d.g.position.y,p.z); d.g.position.copy(p);
+    d.rotors.forEach((r,i)=>r.rotation.y=t*40+i);
+  }
+}
+
+/* ================= DAY / NIGHT ================= */
+let night=false;
+function setNight(n){
+  night=n; $('#b-night').setAttribute('aria-pressed',n);
+  const P=n?NIGHT:DAY;
+  city.background.set(P.bg); city.fog.color.set(P.fog);
+  hemi.intensity=n?.18:1.1; sun.intensity=n?.25:2.6; sun.color.set(n?0x8fa8ff:0xfff1dc);
+  moonFill.intensity=n?.35:0; stars.visible=n;
+  renderer.toneMappingExposure=n?1.25:1.0;
+  windowMats.forEach(m=>m.emissiveIntensity=n?1.15:0);
+  glowMats.forEach(g=>g.m.emissiveIntensity=n?g.night:g.day);
+  const core=landmarks.find(l=>l.def.id==='core'); core.group.userData.beam.material.opacity=n?.22:0;
+}
+
+/* ================= LABELS ================= */
+const labelsEl=$('#labels'); let showLabels=true;
+const lblList=landmarks.map(l=>{
+  const el=document.createElement('div'); el.className='lbl';
+  el.innerHTML=`<i style="background:${hex(l.def.c)}"></i>${l.def.short}`;
+  el.addEventListener('click',()=>{stopTour(); select(l.def.id,true);});
+  labelsEl.appendChild(el);
+  return {el,l,v:new THREE.Vector3()};
+});
+function updateLabels(){
+  const vis = showLabels && mode==='city';
+  labelsEl.hidden=!vis; if(!vis) return;
+  const w=innerWidth,h=innerHeight;
+  for(const L of lblList){
+    L.v.set(L.l.def.at[0],L.l.def.h+5,L.l.def.at[1]).project(camera);
+    if(L.v.z>1||Math.abs(L.v.x)>1.1||Math.abs(L.v.y)>1.1){L.el.style.display='none';continue;}
+    L.el.style.display='';
+    L.el.style.transform=`translate(${(L.v.x*.5+.5)*w}px,${(-L.v.y*.5+.5)*h}px) translate(-50%,-100%)`;
+    L.el.style.opacity = selected && selected!==L.l.def.id ? .55 : 1;
+  }
+}
+
+/* ================= SELECTION MARKER ================= */
+const marker=new THREE.Group();
+const mRing=new THREE.Mesh(new THREE.RingGeometry(21,22.2,64),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.9,side:THREE.DoubleSide,depthWrite:false}));
+mRing.rotation.x=-Math.PI/2; mRing.position.y=.62; marker.add(mRing);
+const mPulse=new THREE.Mesh(new THREE.RingGeometry(20,20.6,64),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.6,side:THREE.DoubleSide,depthWrite:false}));
+mPulse.rotation.x=-Math.PI/2; mPulse.position.y=.64; marker.add(mPulse);
+marker.visible=false; city.add(marker);
+
+/* ================= CAMERA FLIGHT ================= */
+let flight=null;
+function flyTo(pos,target,dur=1.6){
+  flight={p0:camera.position.clone(),t0:controls.target.clone(),p1:pos.clone(),t1:target.clone(),k:0,dur:reduceMotion?.01:dur};
+}
+function flyToBuilding(def){
+  const target=new THREE.Vector3(def.at[0],def.h*.38,def.at[1]);
+  const dir=camera.position.clone().sub(controls.target); dir.y=0; if(dir.lengthSq()<1) dir.set(1,0,1);
+  dir.normalize();
+  const dist=Math.max(62,def.h*1.35);
+  const pos=target.clone().add(dir.multiplyScalar(dist)); pos.y=target.y+dist*.62;
+  flyTo(pos,target);
+}
+
+/* ================= PANEL ================= */
+const panel=$('#panel'); let selected=null, panelKind=null, liveKpis=[], sparkData=[], panelDef=null;
+function catStyle(c){return `color:${hex(c)}`;}
+function renderKpis(list){
+  $('#p-kpis').innerHTML=list.map((k,i)=>`<div><div class="l">${k[0]}</div><div class="v" id="pk${i}">${k[1]}</div></div>`).join('');
+}
+function kpiText(k,live){
+  const [l,v,u,d,j]=k; const val = live? v*(1+(Math.random()*2-1)*j) : v;
+  const n=fmt(val,d);
+  if(u==='$') return '$'+n; if(u==='$B') return '$'+n+'B'; if(u==='$M') return '$'+n+'M'; if(u==='$K') return '$'+n+'K';
+  return n+(u||'');
+}
+function openBuilding(id){
+  const def=byId[id]; panelDef=def; panelKind='building'; selected=id;
+  $('#p-cat').textContent=def.cat; $('#p-cat').style.cssText=catStyle(def.c);
+  $('#p-name').textContent=def.name; $('#p-desc').textContent=def.desc;
+  liveKpis=def.k; renderKpis(def.k.map(k=>[k[0],kpiText(k,false)]));
+  $('#p-spark-wrap').hidden=false; $('#p-spark-label').textContent=def.sp[0];
+  sparkData=[]; let v=def.sp[1]; for(let i=0;i<32;i++){v=v*(1+(Math.random()-.47)*.08); sparkData.push(v);}
+  drawSpark(def.c);
+  $('#p-ins').hidden=false;
+  $('#p-ins').innerHTML=def.ins.map(s=>`<div class="ins"><span class="tag">AI</span><span>${s}</span></div>`).join('');
+  $('#p-enter').hidden=false; $('#p-enter').textContent='Enter '+def.short;
+  $('#p-fly').hidden=false; $('#p-fly').textContent='Focus';
+  panel.hidden=false;
+  document.querySelectorAll('.dir-item').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
+  const g=landmarks.find(l=>l.def.id===id); marker.visible=true; marker.position.set(def.at[0],0,def.at[1]);
+  mRing.material.color.set(def.c); mPulse.material.color.set(def.c);
+}
+function openItem(item,def){
+  panelKind='item'; liveKpis=[];
+  $('#p-cat').textContent='Inside · '+def.short; $('#p-cat').style.cssText=catStyle(def.c);
+  $('#p-name').textContent=item.name; $('#p-desc').textContent=item.info;
+  renderKpis(item.stats);
+  $('#p-spark-wrap').hidden=true; $('#p-ins').hidden=true;
+  $('#p-enter').hidden=false; $('#p-enter').textContent='Building overview';
+  $('#p-fly').hidden=false; $('#p-fly').textContent='Focus';
+  panel.hidden=false;
+  document.querySelectorAll('#in-items button').forEach(b=>b.setAttribute('aria-pressed',b.textContent===item.name));
+}
+function closePanel(){panel.hidden=true; selected=null; panelKind=null; marker.visible=false; document.querySelectorAll('.dir-item').forEach(b=>b.classList.remove('on'));}
+function drawSpark(color){
+  const cv=$('#p-spark'), r=devicePixelRatio||1, w=cv.clientWidth||330, h=cv.clientHeight||74;
+  cv.width=w*r; cv.height=h*r; const c=cv.getContext('2d'); c.scale(r,r); c.clearRect(0,0,w,h);
+  const mn=Math.min(...sparkData)*.97, mx=Math.max(...sparkData)*1.02, n=sparkData.length;
+  const X=i=>i/(n-1)*(w-6)+1, Y=v=>h-4-(v-mn)/(mx-mn)*(h-10);
+  c.strokeStyle='rgba(150,185,230,.12)'; c.lineWidth=1;
+  for(let i=1;i<4;i++){c.beginPath();c.moveTo(0,h*i/4);c.lineTo(w,h*i/4);c.stroke();}
+  const col=hex(color);
+  const grad=c.createLinearGradient(0,0,0,h); grad.addColorStop(0,col+'55'); grad.addColorStop(1,col+'00');
+  c.beginPath(); sparkData.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v))); c.lineTo(X(n-1),h); c.lineTo(X(0),h); c.closePath(); c.fillStyle=grad; c.fill();
+  c.beginPath(); sparkData.forEach((v,i)=>i?c.lineTo(X(i),Y(v)):c.moveTo(X(i),Y(v))); c.strokeStyle=col; c.lineWidth=2; c.stroke();
+  c.beginPath(); c.arc(X(n-1),Y(sparkData[n-1]),3.5,0,7); c.fillStyle=col; c.fill();
+  const last=sparkData[n-1]; $('#p-spark-val').textContent=fmt(last,last<100?1:0);
+}
+function select(id,fly){ openBuilding(id); if(fly) flyToBuilding(byId[id]); }
+
+$('#p-close').onclick=()=>{ if(mode==='inside' && panelKind==='item'){ openBuilding(insideDef.id); } else closePanel(); };
+$('#p-enter').onclick=()=>{ if(panelKind==='building' && mode==='city') enter(panelDef.id); else if(mode==='inside'){ openBuilding(insideDef.id); $('#p-enter').textContent='Exit to city'; } };
+$('#p-fly').onclick=()=>{ if(mode==='city' && panelDef) flyToBuilding(panelDef); else if(mode==='inside' && focusItem) focusOn(focusItem); };
+
+/* directory */
+$('#dir-list').innerHTML=B.map(b=>`<button class="dir-item" data-id="${b.id}"><i style="background:${hex(b.c)}"></i><span>${b.name}</span><em>${b.cat.split(' ')[0]}</em></button>`).join('');
+document.querySelectorAll('.dir-item').forEach(b=>b.onclick=()=>{stopTour(); if(mode==='inside') exitInside(()=>select(b.dataset.id,true)); else select(b.dataset.id,true);});
+
+/* ================= INTERIORS ================= */
+const rooms={}; let mode='city', insideDef=null, activeScene=city, room=null, focusItem=null, savedCam=null;
+function textTex(text,sub,color){
+  const c=document.createElement('canvas'); c.width=1024; c.height=160; const x=c.getContext('2d');
+  x.fillStyle='#0b111c'; x.fillRect(0,0,1024,160);
+  x.fillStyle=hex(color); x.fillRect(0,150,1024,10);
+  x.font='700 64px Unbounded, sans-serif'; x.fillStyle='#ffffff'; x.textBaseline='middle'; x.fillText(text,36,64);
+  x.font='500 28px "IBM Plex Mono", monospace'; x.fillStyle=hex(color); x.fillText(sub,40,122);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+function screenTex(title,color){
+  const c=document.createElement('canvas'); c.width=768; c.height=384; const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  const data=Array.from({length:24},()=>rand(30,90)), bars=Array.from({length:6},()=>rand(20,95));
+  const draw=()=>{
+    const x=c.getContext('2d'); const col=hex(color);
+    x.fillStyle='#07101d'; x.fillRect(0,0,768,384);
+    x.strokeStyle='rgba(150,190,255,.12)'; for(let i=1;i<6;i++){x.beginPath();x.moveTo(0,i*64);x.lineTo(768,i*64);x.stroke();}
+    x.font='600 26px "IBM Plex Sans", sans-serif'; x.fillStyle='#e9eff8'; x.fillText(title,24,40);
+    x.font='500 18px "IBM Plex Mono", monospace'; x.fillStyle=col; x.fillText('LIVE ● '+new Date().toLocaleTimeString('en-GB'),24,70);
+    x.beginPath(); data.forEach((v,i)=>{const X=24+i*(470/23), Y=350-v*2.6; i?x.lineTo(X,Y):x.moveTo(X,Y);}); x.strokeStyle=col; x.lineWidth=4; x.stroke();
+    x.lineTo(494,350); x.lineTo(24,350); x.closePath(); x.fillStyle=col+'33'; x.fill();
+    bars.forEach((v,i)=>{x.fillStyle=i%2?col:'#e9eff8'; x.globalAlpha=i%2?1:.7; x.fillRect(540+i*36,350-v*2.5,24,v*2.5);}); x.globalAlpha=1;
+    t.needsUpdate=true;
+  };
+  draw();
+  return {t,tick(){data.shift();data.push(Math.max(10,Math.min(98,data[data.length-1]+rand(-12,12))));bars.forEach((v,i)=>bars[i]=Math.max(10,Math.min(98,v+rand(-10,10))));draw();}};
+}
+function gridTex(color){
+  const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d');
+  x.fillStyle='#1a2130'; x.fillRect(0,0,256,256); x.strokeStyle='#28324a'; x.lineWidth=2;
+  for(let i=0;i<=256;i+=64){x.beginPath();x.moveTo(i,0);x.lineTo(i,256);x.stroke();x.beginPath();x.moveTo(0,i);x.lineTo(256,i);x.stroke();}
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(16,11); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+function buildItem(type,accent,opt,roomAnims,screens){
+  const g=new THREE.Group();
+  const acc=M(accent,{e:accent,ei:1.4}), dark=M(0x2a3140,{r:.5,m:.3}), light=M(0xe7ebf0,{r:.5}), metal=M(0x9aa4b2,{m:.7,r:.3});
+  switch(type){
+    case 'desks': for(let i=0;i<2;i++)for(let j=0;j<2;j++){const x=i*5.5-2.75,z=j*4.5-2.25;
+      g.add(at(box(4,.25,2.2,light),x,2.4,z)); g.add(at(box(3.8,2.3,.2,dark),x,1.15,z-.9));
+      g.add(at(box(2.2,1.4,.15,dark),x,3.5,z-.6)); g.add(at(box(2,1.2,.05,acc),x,3.5,z-.5));
+      g.add(at(box(1.3,1.2,1.3,M(accent,{r:.8})),x,.9,z+1.6));} break;
+    case 'screen':{const s=screenTex(opt.name,accent); screens.push(s);
+      g.add(at(box(15,8,.5,dark),0,6.5,0));
+      const p=new THREE.Mesh(new THREE.PlaneGeometry(14,7),new THREE.MeshBasicMaterial({map:s.t})); at(p,0,6.5,.27); g.add(p);
+      g.add(at(box(15.4,.25,.8,acc),0,2.3,.1)); break;}
+    case 'racks': for(let i=0;i<5;i++){const r=box(2.2,7,3,M(0x1a1f28,{m:.5,r:.3})); at(r,-5.2+i*2.6,3.5,0); g.add(r);
+      for(let k=0;k<6;k++){const l=box(1.6,.15,.05,M(accent,{e:accent,ei:1})); at(l,-5.2+i*2.6,1+k*1,1.53); g.add(l); const ph=rand(0,6); roomAnims.push(t=>{l.material.emissiveIntensity=Math.sin(t*4+ph)>0?2:.2;});}} break;
+    case 'robot':{g.add(at(cyl(1.6,1.9,1,dark),0,.5,0)); const b=new THREE.Group(); b.position.y=1; g.add(b);
+      b.add(at(cyl(.8,.8,1,M(accent,{r:.4})),0,.5,0)); const a1=new THREE.Group(); a1.position.y=1; b.add(a1);
+      a1.add(at(box(.7,4.5,.7,light),0,2.25,0)); const a2=new THREE.Group(); a2.position.y=4.5; a1.add(a2);
+      a2.add(at(box(.6,3.5,.6,light),0,1.75,0)); a2.add(at(box(1.2,.5,1.2,acc),0,3.6,0));
+      g.add(at(box(4,2,3,M(0x3b4556)),3.8,1,0));
+      const ph=rand(0,6); roomAnims.push(t=>{b.rotation.y=Math.sin(t*.7+ph)*1.2; a1.rotation.z=-.4+Math.sin(t*1.1+ph)*.35; a2.rotation.z=1.1+Math.sin(t*1.3+ph)*.4;}); break;}
+    case 'hologram':{g.add(at(cyl(2.8,3.2,1.2,dark,32),0,.6,0)); const rr=new THREE.Mesh(new THREE.TorusGeometry(2.8,.12,8,48),acc); rr.rotation.x=Math.PI/2; at(rr,0,1.25,0); g.add(rr);
+      const ico=new THREE.Mesh(new THREE.IcosahedronGeometry(2.4,1),M(accent,{e:accent,ei:1.5,w:true})); at(ico,0,5,0); g.add(ico);
+      const inner=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0),M(0xffffff,{e:accent,ei:2})); at(inner,0,5,0); g.add(inner);
+      const cone=new THREE.Mesh(new THREE.CylinderGeometry(2.6,.4,3.4,24,1,true),new THREE.MeshBasicMaterial({color:accent,transparent:true,opacity:.12,side:THREE.DoubleSide,depthWrite:false})); at(cone,0,3,0); g.add(cone);
+      roomAnims.push(t=>{ico.rotation.y=t*.7; ico.rotation.x=t*.3; inner.rotation.y=-t*1.5; ico.position.y=inner.position.y=5+Math.sin(t*1.5)*.3;}); break;}
+    case 'vault':{g.add(at(box(11,10,1,metal),0,5,0)); const d=new THREE.Group(); at(d,0,5,.6); g.add(d);
+      const door=cyl(3.8,3.8,.9,M(0xc9a24a,{m:.85,r:.25}),40); door.rotation.x=Math.PI/2; d.add(door);
+      for(let k=0;k<3;k++){const sp=box(5.2,.35,.35,metal); sp.rotation.z=k*Math.PI/3; sp.position.z=.6; d.add(sp);}
+      const hub=cyl(.8,.8,.6,acc,20); hub.rotation.x=Math.PI/2; hub.position.z=.7; d.add(hub);
+      roomAnims.push(t=>{d.rotation.z=Math.sin(t*.4)*.6;}); break;}
+    case 'counter': g.add(at(box(11,2.4,2,M(0x2f3747,{r:.4})),0,1.2,0)); g.add(at(box(11.4,.2,2.4,light),0,2.5,0)); g.add(at(box(11.05,.25,.05,acc),0,1.8,1.02));
+      for(let i=0;i<3;i++){g.add(at(box(1.4,1,.12,dark),-3.6+i*3.6,3.2,-.3)); g.add(at(box(1.25,.85,.05,acc),-3.6+i*3.6,3.2,-.22));} break;
+    case 'sofa':{const sm=M(accent,{r:.85}); g.add(at(box(7,1.1,2.6,sm),0,.8,0)); g.add(at(box(7,1.8,.7,sm),0,1.6,-1.1));
+      g.add(at(box(.7,1.4,2.6,sm),-3.5,1.1,0)); g.add(at(box(.7,1.4,2.6,sm),3.5,1.1,0));
+      g.add(at(cyl(1.5,1.5,.2,light,24),0,1.1,3)); g.add(at(cyl(.2,.2,1,metal,8),0,.5,3));
+      g.add(at(box(1.2,.05,.8,acc),0,1.25,3)); break;}
+    case 'bed': for(let i=0;i<2;i++){const x=i*6-3; g.add(at(box(3.2,1.1,6.4,metal),x,.8,0)); g.add(at(box(3,.5,6,light),x,1.55,0)); g.add(at(box(2.4,.4,1.2,light),x,2,-2.3));
+      g.add(at(box(3,.15,3.4,M(accent,{r:.9})),x,1.85,1.2)); g.add(at(cyl(.1,.1,4.5,metal,6),x+2.1,2.25,-2.8)); g.add(at(box(1.4,1,.1,acc),x+2.1,4.3,-2.7));} break;
+    case 'shelf': for(let i=0;i<3;i++){const x=-4.5+i*4.5; for(let k=0;k<4;k++)g.add(at(box(2.6,.2,8,metal),x,.3+k*2.2,0));
+      for(let k=0;k<3;k++)for(let b=0;b<4;b++)g.add(at(box(1.6,1.4,1.4,M(pick([0xc89a5b,0xd8b27a,accent,0xb0bac6]),{r:.8})),x,1.1+k*2.2,-3+b*2));}
+      {const bot=box(2,1,2,M(accent,{e:accent,ei:.5})); at(bot,0,.5,5.5); g.add(bot); roomAnims.push(t=>{bot.position.x=Math.sin(t*.6)*7;});} break;
+    case 'conveyor':{g.add(at(box(18,.6,2.6,M(0x1d232d)),0,1.8,0)); g.add(at(box(18,.1,2.7,acc),0,1.5,0));
+      for(const x of [-8,-3,2,7])g.add(at(box(.4,1.5,2.2,metal),x,.75,0));
+      for(let k=0;k<6;k++){const p=box(1.3,1,1.3,M(0xc89a5b,{r:.8})); g.add(p); const off=k/6; roomAnims.push(t=>{const u=((t*.08+off)%1); p.position.set(-8.5+u*17,2.6,0);});}
+      g.add(at(box(2,3.8,3.4,M(0x3b4556)),3,3,0)); g.add(at(box(2.05,.4,3.45,acc),3,4.4,0)); break;}
+    case 'machine': g.add(at(box(6,5,5,M(0xdfe4ea,{r:.4})),0,2.5,0)); g.add(at(box(3,2.4,.1,M(accent,{e:accent,ei:1.2,t:true,op:.85})),-.6,3,2.52));
+      g.add(at(box(1.2,1.6,.1,dark),2.1,3.1,2.52)); g.add(at(box(6.05,.3,5.05,acc),0,4.6,0)); break;
+    case 'charger': for(let i=0;i<3;i++){const x=-5+i*5; g.add(at(box(.9,3.4,.7,light),x,1.7,-2)); g.add(at(box(.92,2,.1,acc),x,2.2,-1.62));
+      const car=makeCar(pick([0xffffff,0x9fb6cf,0x3a3f48]),i!==1); car.rotation.y=Math.PI/2; car.position.set(x,0,1); g.add(car);} break;
+    case 'battery': for(let i=0;i<4;i++){const x=-4.5+i*3; g.add(at(box(2.5,5.5,2.5,M(0xeef1f4,{r:.4})),x,2.75,0));
+      for(let k=0;k<4;k++){const l=box(1.6,.6,.05,M(0x2ee67a,{e:0x2ee67a,ei:k<3?1.5:.1})); at(l,x,1+k*1.1,1.28); g.add(l);}} break;
+    case 'tank': for(let i=0;i<3;i++){g.add(at(cyl(1.6,1.6,7.5,metal,20),-4+i*4,3.75,0)); g.add(at(cyl(1.65,1.65,.4,acc,20),-4+i*4,5.5,0));}
+      g.add(at(box(10,.5,.5,M(0x3a7bd5)),0,6.8,0)); break;
+    case 'kiosk':{const cc=opt.color??accent; g.add(at(box(7,3.5,5,M(0x283041)),0,1.75,0)); g.add(at(box(7.8,.5,6,M(cc,{e:cc,ei:.6})),0,3.9,.4));
+      g.add(at(box(6,2.2,.1,M(cc,{e:cc,ei:.8,t:true,op:.6})),0,2,2.52)); g.add(at(box(7,1.2,1.4,light),0,.6,3.4)); break;}
+    case 'stage':{g.add(at(box(11,1,5,dark),0,.5,-3)); g.add(at(box(11.05,.15,5.05,acc),0,1.05,-3)); g.add(at(box(1.4,2.4,1,light),2.5,2.2,-3));
+      g.add(at(box(6,3.4,.2,M(accent,{e:accent,ei:.8})),-2,3.7,-5.2));
+      for(let r=0;r<3;r++)for(let k=0;k<6;k++)g.add(at(box(1.2,1,1.2,M(r%2?0x3d4658:0x4a5468)),-4.5+k*1.8,.5,2+r*2.2)); break;}
+    case 'plant':{g.add(at(box(14,8,1,M(0x2d3a2a)),0,4,0)); for(let k=0;k<40;k++){const s=new THREE.Mesh(new THREE.IcosahedronGeometry(rand(.6,1.2),0),M(new THREE.Color().setHSL(rand(.24,.36),.5,rand(.28,.45)).getHex(),{r:.9})); at(s,rand(-6.5,6.5),rand(.8,7.4),.7); g.add(s);}
+      g.add(at(box(14,.8,2.4,M(0x6b4f37)),0,.4,1.7)); break;}
+    case 'pad':{g.add(at(cyl(4,4,.3,dark,32),0,.15,0)); const rr=new THREE.Mesh(new THREE.TorusGeometry(3.6,.15,8,40),acc); rr.rotation.x=Math.PI/2; at(rr,0,.35,0); g.add(rr);
+      const d=new THREE.Group(); d.add(box(1.6,.5,1.6,dark)); d.add(at(box(1,.8,1,M(0xc89a5b)),0,-.6,0));
+      const rs=[]; for(const [x,z] of [[1.1,1.1],[-1.1,1.1],[1.1,-1.1],[-1.1,-1.1]]){const r=box(1.4,.05,.2,M(0x111111)); at(r,x,.35,z); d.add(r); rs.push(r);}
+      g.add(d); roomAnims.push(t=>{d.position.y=3+Math.sin(t*1.2)*1.2; rs.forEach((r,i)=>r.rotation.y=t*30+i);}); break;}
+  }
+  return g;
+}
+function buildRoom(def){
+  const s=new THREE.Scene(); s.background=new THREE.Color(0x0c121e); s.fog=new THREE.Fog(0x0c121e,110,220);
+  s.add(new THREE.HemisphereLight(0xdfe9ff,0x202634,1.3));
+  const dl=new THREE.DirectionalLight(0xffffff,1.6); dl.position.set(15,40,25); dl.castShadow=true; dl.shadow.mapSize.set(1024,1024);
+  Object.assign(dl.shadow.camera,{left:-40,right:40,top:40,bottom:-40,near:1,far:120}); s.add(dl);
+  const pl=new THREE.PointLight(def.c,3,70,0); pl.position.set(0,12,0); s.add(pl);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(64,44),new THREE.MeshStandardMaterial({map:gridTex(def.c),roughness:.7,metalness:.2}));
+  floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; s.add(floor);
+  const wallM=new THREE.MeshStandardMaterial({color:0x1e2636,roughness:.8});
+  const bw=new THREE.Mesh(new THREE.PlaneGeometry(64,16),wallM); at(bw,0,8,-22); s.add(bw);
+  const lw=new THREE.Mesh(new THREE.PlaneGeometry(44,16),wallM); lw.rotation.y=Math.PI/2; at(lw,-32,8,0); s.add(lw);
+  const rw=new THREE.Mesh(new THREE.PlaneGeometry(44,16),wallM); rw.rotation.y=-Math.PI/2; at(rw,32,8,0); s.add(rw);
+  const strip=M(def.c,{e:def.c,ei:1.5});
+  s.add(at(box(64,.3,.3,strip),0,15.6,-21.8)); s.add(at(box(.3,.3,44,strip),-31.8,15.6,0)); s.add(at(box(.3,.3,44,strip),31.8,15.6,0));
+  // windows on right wall showing city glow
+  for(let i=0;i<4;i++){const w=new THREE.Mesh(new THREE.PlaneGeometry(8,8),new THREE.MeshBasicMaterial({color:0x6aa9d8,transparent:true,opacity:.35})); w.rotation.y=-Math.PI/2; at(w,31.9,8,-15+i*10); s.add(w);}
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(30,4.7),new THREE.MeshBasicMaterial({map:textTex(def.name,def.cat.toUpperCase(),def.c)}));
+  at(sign,0,13.2,-21.9); s.add(sign);
+  const roomAnims=[], screens=[], picks=[], items=[];
+  for(const r of def.room){
+    const [type,name,x,z,info,stats,opt={}]=r; const item={type,name,info,stats,def};
+    const g=buildItem(type,def.c,{...opt,name},roomAnims,screens);
+    if(opt.wall==='left'){g.position.set(-31.2,0,z); g.rotation.y=Math.PI/2;}
+    else if(type==='screen'||type==='vault'||type==='plant'&&z<-15){g.position.set(x,0,-21.3);}
+    else g.position.set(x,0,z);
+    g.traverse(o=>{o.userData.item=item;});
+    item.group=g; s.add(g); picks.push(g); items.push(item);
+  }
+  // decorative plants
+  for(const [x,z] of [[-28,-18],[28,-18],[28,18],[-28,18]]){s.add(at(cyl(1,1.2,1.6,M(0x39404b),12),x,.8,z)); s.add(at(new THREE.Mesh(new THREE.IcosahedronGeometry(1.5,0),M(0x4f8f45)),x,2.6,z));}
+  return {scene:s,roomAnims,screens,picks,items};
+}
+
+function fade(cb){
+  const f=$('#fade'); f.classList.add('on');
+  setTimeout(()=>{cb(); requestAnimationFrame(()=>setTimeout(()=>f.classList.remove('on'),60));}, reduceMotion?0:360);
+}
+function enter(id){
+  stopTour(); const def=byId[id];
+  fade(()=>{
+    if(!rooms[id]) rooms[id]=buildRoom(def);
+    room=rooms[id]; insideDef=def; mode='inside'; activeScene=room.scene;
+    savedCam={p:camera.position.clone(),t:controls.target.clone()}; flight=null;
+    camera.position.set(0,30,46); controls.target.set(0,2,-2);
+    controls.maxPolarAngle=1.38; controls.minDistance=8; controls.maxDistance=90; controls.autoRotate=false;
+    $('#in-name').textContent=def.name; $('#inbar').hidden=false;
+    $('#in-items').innerHTML=room.items.map((it,i)=>`<button class="tbtn" data-i="${i}" aria-pressed="false">${it.name}</button>`).join('');
+    $('#in-items').hidden=false;
+    $('#in-items').querySelectorAll('button').forEach(b=>b.onclick=()=>{const it=room.items[+b.dataset.i]; focusItem=it; openItem(it,def); focusOn(it);});
+    $('#kpis').hidden=true; $('#dir').hidden=true; $('#ask').hidden=true;
+    openBuilding(id); $('#p-enter').textContent='Exit to city';
+    panelKind='inside-overview';
+  });
+}
+function exitInside(after){
+  fade(()=>{
+    mode='city'; activeScene=city; room=null; focusItem=null;
+    controls.maxPolarAngle=Math.PI*.47; controls.minDistance=18; controls.maxDistance=420;
+    if(savedCam){camera.position.copy(savedCam.p); controls.target.copy(savedCam.t);}
+    $('#inbar').hidden=true; $('#in-items').hidden=true; $('#kpis').hidden=false; $('#dir').hidden=false; $('#ask').hidden=false;
+    const id=insideDef.id; insideDef=null; openBuilding(id);
+    if(after) after();
+  });
+}
+function focusOn(item){
+  const p=item.group.position.clone(); const t=new THREE.Vector3(p.x,3,p.z);
+  const off= item.group.rotation.y? new THREE.Vector3(30,16,4) : new THREE.Vector3(p.x*.15,17,p.z<-15?34:24);
+  flyTo(t.clone().add(off),t,1.1);
+}
+$('#in-exit').onclick=()=>exitInside();
+// override panel primary inside
+$('#p-enter').addEventListener('click',e=>{
+  if(mode!=='inside') return;
+  if(panelKind==='inside-overview'||panelKind==='building'){ e.stopImmediatePropagation(); exitInside(); }
+},true);
+
+/* ================= PICKING ================= */
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), tip=$('#tip');
+let downAt=null, hoverId=null;
+function hitTest(ev){
+  const r=canvas.getBoundingClientRect(); ndc.set(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  if(mode==='city'){
+    const hits=ray.intersectObjects(landmarks.map(l=>l.group),true);
+    for(const h of hits){ if(h.object.userData.bid) return {bid:h.object.userData.bid}; }
+  } else if(room){
+    const hits=ray.intersectObjects(room.picks,true);
+    for(const h of hits){ if(h.object.userData.item) return {item:h.object.userData.item}; }
+  }
+  return null;
+}
+canvas.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY]; stopTour(); controls.autoRotate=false;});
+canvas.addEventListener('pointermove',e=>{
+  if(e.pointerType!=='mouse') return;
+  const h=hitTest(e);
+  if(h){ canvas.style.cursor='pointer'; tip.hidden=false; tip.style.left=e.clientX+'px'; tip.style.top=e.clientY+'px';
+    if(h.bid){const d=byId[h.bid]; tip.innerHTML=`${d.name}<em>${d.cat} · click to open</em>`;}
+    else tip.innerHTML=`${h.item.name}<em>click for details</em>`;
+  } else { canvas.style.cursor='grab'; tip.hidden=true; }
+});
+canvas.addEventListener('pointerleave',()=>{tip.hidden=true;});
+canvas.addEventListener('pointerup',e=>{
+  if(!downAt) return; const moved=Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1]); downAt=null; if(moved>6) return;
+  const h=hitTest(e);
+  if(h&&h.bid){ select(h.bid,true); }
+  else if(h&&h.item){ focusItem=h.item; openItem(h.item,insideDef); focusOn(h.item); }
+});
+canvas.addEventListener('dblclick',e=>{const h=hitTest(e); if(h&&h.bid) enter(h.bid);});
+addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(mode==='inside') exitInside(); else closePanel(); } });
+
+/* ================= TOOLBAR ================= */
+$('#b-night').onclick=()=>setNight(!night);
+$('#b-ai').onclick=()=>{aiTraffic=!aiTraffic; $('#b-ai').setAttribute('aria-pressed',aiTraffic);};
+$('#b-labels').onclick=()=>{showLabels=!showLabels; $('#b-labels').setAttribute('aria-pressed',showLabels);};
+$('#b-reset').onclick=()=>{ if(mode==='inside'){flyTo(new THREE.Vector3(0,30,46),new THREE.Vector3(0,2,-2));} else {closePanel(); flyTo(new THREE.Vector3(170,135,175),new THREE.Vector3(0,8,0));} };
+let tour=null;
+const TOUR=['core','bank','startup','mall','logi','energy','data','hosp','mob','uni','fact','park','home'];
+function stopTour(){ if(tour){clearInterval(tour); tour=null; $('#b-tour').setAttribute('aria-pressed','false');} }
+$('#b-tour').onclick=()=>{
+  if(tour){stopTour();return;}
+  if(mode==='inside'){exitInside(()=>startTour());} else startTour();
+};
+function startTour(){ let i=0; $('#b-tour').setAttribute('aria-pressed','true'); controls.autoRotate=false;
+  const step=()=>{select(TOUR[i%TOUR.length],true); i++;}; step(); tour=setInterval(step,6500); }
+
+/* ================= ASK NEXUS ================= */
+$('#ask-toggle').onclick=()=>{const b=$('#ask-box'); b.hidden=!b.hidden; $('#ask-toggle').setAttribute('aria-expanded',!b.hidden);};
+let revenue=8.42e6, co2=212, aiDec=3420;
+const answers={
+  traffic:()=>`Average speed is <b>${fmt(trafficStats.speed,0)} km/h</b> with <b>${fmt(trafficStats.wait,0)}</b> cars waiting at red lights. ${aiTraffic?'AI signal control is <b>on</b>: lights switch toward the busier direction. Turn it off in the toolbar to compare with fixed timers.':'AI control is <b>off</b>, so lights run on fixed 9-second timers. Turn it back on and watch the queue count drop.'}`,
+  money:()=>`<b>Quantum Bank</b> leads on profit (31% margin), but <b>Orbit Mall</b> has the most revenue today at about $1.94M. Total city revenue so far: <b>$${fmt(revenue/1e6,2)}M</b>.`,
+  green:()=>`<b>81%</b> of power comes from Helios solar and wind. The city has avoided <b>${fmt(co2,0)} t</b> of CO₂ today, and Central Park reports AQI 28 (good).`,
+  invest:()=>`Best growth signal: <b>AI-for-retail startups</b> at Launchpad (+14% monthly growth) and <b>cloud rental</b> at the Data Center (+27% this quarter). Lowest risk: Helios energy exports with stable contracts. This is a simulation, not financial advice.`,
+  jobs:()=>`Most-demanded roles in Nexus: <b>AI product manager</b>, data analyst, robotics technician, FinTech risk analyst and e-commerce growth manager. Tech University reports <b>94%</b> graduate employment.`
+};
+document.querySelectorAll('.chip-btn').forEach(b=>b.onclick=()=>{$('#ask-answer').innerHTML=answers[b.dataset.q]();});
+
+/* ================= LIVE KPIs ================= */
+function tickKpis(){
+  const hour=night?21:13;
+  revenue+=rand(1800,4200); co2+=rand(.05,.2); aiDec=Math.round(3200+rand(-200,300)+trafficStats.wait*15);
+  const power=night? rand(132,140): rand(176,190);
+  $('#k-rev').textContent='$'+fmt(revenue/1e6,2)+'M';
+  $('#k-pow').innerHTML=fmt(power,0)+'<small>MW</small>';
+  $('#k-pow-s').textContent=(night?'64':'81')+'% renewable';
+  $('#k-spd').innerHTML=fmt(trafficStats.speed,0)+'<small>km/h</small>';
+  $('#k-spd-s').textContent=aiTraffic?'AI signal control on':'fixed signal timers';
+  $('#k-spd-s').className='s '+(aiTraffic?'up':'');
+  $('#k-wait').textContent=fmt(trafficStats.wait,0);
+  $('#k-ai').innerHTML=fmt(aiDec,0)+'<small>/min</small>';
+  $('#k-co2').innerHTML=fmt(co2,0)+'<small>t</small>';
+  if(!panel.hidden && liveKpis.length && panelKind!=='item'){ liveKpis.forEach((k,i)=>{const el=document.getElementById('pk'+i); if(el) el.textContent=kpiText(k,true);});
+    const last=sparkData[sparkData.length-1]; sparkData.shift(); sparkData.push(last*(1+(Math.random()-.47)*.06)); drawSpark(panelDef.c); }
+  if(room) room.screens.forEach(s=>s.tick());
+}
+setInterval(tickKpis,1500);
+
+/* ================= LOOP ================= */
+function resize(){const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();}
+addEventListener('resize',resize); resize();
+const clock=new THREE.Clock(); let T=0;
+function loop(){
+  const dt=Math.min(clock.getDelta(),.05); T+=dt;
+  if(flight){flight.k=Math.min(1,flight.k+dt/flight.dur); const e=flight.k<.5?4*flight.k**3:1-(-2*flight.k+2)**3/2;
+    camera.position.lerpVectors(flight.p0,flight.p1,e); controls.target.lerpVectors(flight.t0,flight.t1,e); if(flight.k>=1) flight=null;}
+  controls.update();
+  if(mode==='city'){
+    const tt=reduceMotion?0:T;
+    anims.forEach(f=>f(tt)); updateTraffic(dt); if(!reduceMotion) updateDrones(dt,T);
+    if(marker.visible){const s=1+((T*.8)%1)*.35; mPulse.scale.set(s,s,1); mPulse.material.opacity=.6*(1-((T*.8)%1));}
+  } else if(room){ room.roomAnims.forEach(f=>f(reduceMotion?0:T)); }
+  renderer.render(activeScene,camera);
+  updateLabels();
+  requestAnimationFrame(loop);
+}
+setNight(false);
+for(let i=0;i<120;i++) updateTraffic(1/30);
+tickKpis();
+loop();
+$('#loading').textContent='Ready';
+$('#intro-go').onclick=()=>{$('#intro').hidden=true; canvas.focus();};
+</script>
+<script>
+setTimeout(()=>{const l=document.getElementById('loading'); if(l&&l.textContent.startsWith('Loading')) l.textContent='Still loading the 3D engine… check your connection.';},12000);
+</script>
+</body>
+</html>
